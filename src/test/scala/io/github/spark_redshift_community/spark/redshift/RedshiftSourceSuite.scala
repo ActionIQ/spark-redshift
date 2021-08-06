@@ -251,7 +251,7 @@ class RedshiftSourceSuite
     val rdd = relation.asInstanceOf[PrunedFilteredScan]
       .buildScan(Array("testbyte", "testbool"), Array.empty[Filter])
       .mapPartitions { iter =>
-        val fromRow = RowEncoder(resultSchema).resolveAndBind().createDeserializer().apply(_)
+        val fromRow = RowEncoder(resultSchema).resolveAndBind().fromRow _
         iter.asInstanceOf[Iterator[InternalRow]].map(fromRow)
       }
     val prunedExpectedValues = Array(
@@ -304,7 +304,7 @@ class RedshiftSourceSuite
     val rdd = relation.asInstanceOf[PrunedFilteredScan]
       .buildScan(Array("testbyte", "testbool"), filters)
       .mapPartitions { iter =>
-        val fromRow = RowEncoder(resultSchema).resolveAndBind().createDeserializer().apply(_)
+        val fromRow = RowEncoder(resultSchema).resolveAndBind().fromRow _
         iter.asInstanceOf[Iterator[InternalRow]].map(fromRow)
       }
 
@@ -341,7 +341,7 @@ class RedshiftSourceSuite
     val rdd = relation.asInstanceOf[PrunedFilteredScan]
       .buildScan(Array("testbyte", "testbool"), Array.empty[Filter])
       .mapPartitions { iter =>
-        val fromRow = RowEncoder(resultSchema).resolveAndBind().createDeserializer().apply(_)
+        val fromRow = RowEncoder(resultSchema).resolveAndBind().fromRow _
         iter.asInstanceOf[Iterator[InternalRow]].map(fromRow)
       }
     val prunedExpectedValues = Array(
@@ -658,23 +658,23 @@ class RedshiftSourceSuite
 
   test("Saves throw error message if S3 Block FileSystem would be used") {
     val params = defaultParams + ("tempdir" -> defaultParams("tempdir").replace("s3a", "s3"))
-    val e = intercept[UnsupportedFileSystemException] {
+    val e = intercept[IllegalArgumentException] {
       expectedDataDF.write
         .format("io.github.spark_redshift_community.spark.redshift")
         .mode("append")
         .options(params)
         .save()
     }
-    assert(e.getMessage.contains("No FileSystem for scheme"))
+    assert(e.getMessage.contains("Block FileSystem"))
   }
 
   test("Loads throw error message if S3 Block FileSystem would be used") {
     val params = defaultParams + ("tempdir" -> defaultParams("tempdir").replace("s3a", "s3"))
-    val e = intercept[UnsupportedFileSystemException] {
+    val e = intercept[IllegalArgumentException] {
       testSqlContext.read.format("io.github.spark_redshift_community.spark.redshift")
         .options(params)
         .load()
     }
-    assert(e.getMessage.contains("No FileSystem for scheme"))
+    assert(e.getMessage.contains("Block FileSystem"))
   }
 }

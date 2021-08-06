@@ -22,15 +22,15 @@ import sbtrelease.ReleasePlugin.autoImport.ReleaseTransformations._
 import sbtrelease.ReleasePlugin.autoImport._
 import scoverage.ScoverageKeys
 
-val sparkVersion = "3.0.2"
+val sparkVersion = "2.4.7"
 
 // Define a custom test configuration so that unit test helper classes can be re-used under
 // the integration tests configuration; see http://stackoverflow.com/a/20635808.
 lazy val IntegrationTest = config("it") extend Test
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
-val testHadoopVersion = sys.props.get("hadoop.testVersion").getOrElse("3.2.1")
+val testHadoopVersion = sys.props.get("hadoop.testVersion").getOrElse("2.9.2")
 // DON't UPGRADE AWS-SDK-JAVA if not compatible with hadoop version
-val testAWSJavaSDKVersion = sys.props.get("aws.testVersion").getOrElse("1.11.1033")
+val testAWSJavaSDKVersion = sys.props.get("aws.testVersion").getOrElse("1.11.199")
 
 
 lazy val root = Project("spark-redshift", file("."))
@@ -42,13 +42,13 @@ lazy val root = Project("spark-redshift", file("."))
   .settings(
     name := "spark-redshift",
     organization := "io.github.spark-redshift-community",
-    scalaVersion := "2.12.11",
+    scalaVersion := "2.11.12",
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".sbt" / ".credentials"),
     scalacOptions ++= Seq("-target:jvm-1.8"),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     libraryDependencies ++= Seq(
-      "org.slf4j" % "slf4j-api" % "1.7.5",
+      "org.slf4j" % "slf4j-api" % "1.7.16",
       "com.eclipsesource.minimal-json" % "minimal-json" % "0.9.4",
 
       // A Redshift-compatible JDBC driver must be present on the classpath for spark-redshift to work.
