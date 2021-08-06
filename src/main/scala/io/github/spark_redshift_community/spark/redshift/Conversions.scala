@@ -24,6 +24,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types._
 
@@ -135,7 +136,7 @@ private[redshift] object Conversions {
     // As a performance optimization, re-use the same mutable row / array:
     val converted: Array[Any] = Array.fill(schema.length)(null)
     val externalRow = new GenericRow(converted)
-    val toRow = RowEncoder(schema).createSerializer()
+    val encoder = RowEncoder(schema)
     (inputRow: Array[String]) => {
       var i = 0
       while (i < schema.length) {
@@ -152,7 +153,7 @@ private[redshift] object Conversions {
         }
         i += 1
       }
-      toRow.apply(externalRow)
+      encoder.toRow(externalRow)
     }
   }
 }

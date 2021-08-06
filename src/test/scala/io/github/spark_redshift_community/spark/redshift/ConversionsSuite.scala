@@ -31,7 +31,7 @@ class ConversionsSuite extends FunSuite {
 
   private def createRowConverter(schema: StructType) = {
     Conversions.createRowConverter(schema, Parameters.DEFAULT_PARAMETERS("csvnullstring"))
-      .andThen(RowEncoder(schema).resolveAndBind().createDeserializer())
+      .andThen(RowEncoder(schema).resolveAndBind().fromRow)
   }
 
   test("Data should be correctly converted") {
