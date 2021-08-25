@@ -43,6 +43,7 @@ lazy val root = Project("spark-redshift", file("."))
     name := "spark-redshift",
     organization := "io.github.spark-redshift-community",
     scalaVersion := "2.11.12",
+    crossScalaVersions := Seq("2.11.12", "2.12.14"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".sbt" / ".credentials"),
     scalacOptions ++= Seq("-target:jvm-1.8"),
