@@ -89,28 +89,9 @@ private[redshift] case class RedshiftRelation(
     filters.filterNot(filter => FilterPushdown.buildFilterExpression(schema, filter).isDefined)
   }
 
-  private def appendTagsToQuery(query: String): String = {
-    val jdbcProps = jdbcOptions.asProperties.asScala
-    val aiqPropsString = jdbcProps.collect {
-      case (k, v) if k.startsWith("aiq_") =>
-        k.replace("aiq_", "") + ":" + v
-    }.mkString(",")
-
-    val finalQuery = if (aiqPropsString.nonEmpty) {
-      s"/* $aiqPropsString */\n$query"
-    } else {
-      query
-    }
-
-    if (jdbcProps.get("aiq_testing").exists(_.toBoolean)) {
-      RedshiftPushDownSqlStatement.capturedQueries.append(finalQuery)
-    }
-    finalQuery
-  }
-
   private def executeCountQuery(query: String): RDD[InternalRow] = {
     val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params.credentials)
-    val queryWithTag = appendTagsToQuery(query)
+    val queryWithTag = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, query)
     try {
       val results = jdbcWrapper.executeQueryInterruptibly(conn.prepareStatement(queryWithTag))
       if (results.next()) {
@@ -248,7 +229,7 @@ private[redshift] case class RedshiftRelation(
     val unloadQuery = s"UNLOAD ('$query') TO '$fixedUrl' WITH CREDENTIALS '$credsString'" +
       s" ESCAPE MANIFEST NULL AS '${params.nullString}'" +
       s" $sseKmsClause"
-    val finalQuery = appendTagsToQuery(unloadQuery)
+    val finalQuery = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, query)
     log.info(finalQuery)
     finalQuery
   }

@@ -21,7 +21,10 @@
 
 package io.github.spark_redshift_community.spark.redshift
 
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+
 import scala.collection.mutable.ListBuffer
+import scala.collection.JavaConverters._
 
 private[redshift] case class ConstantString(override val value: String)
   extends StatementElement
@@ -69,6 +72,25 @@ sealed trait StatementElement {
 object RedshiftPushDownSqlStatement {
   // FOR TESTING ONLY!
   val capturedQueries = ListBuffer.empty[String]
+
+  private[redshift] def appendTagsToQuery(jdbcOptions: JDBCOptions, query: String): String = {
+    val jdbcProps = jdbcOptions.asProperties.asScala
+    val aiqPropsString = jdbcProps.collect {
+      case (k, v) if k.startsWith("aiq_") =>
+        k.replace("aiq_", "") + ":" + v
+    }.mkString(",")
+
+    val finalQuery = if (aiqPropsString.nonEmpty) {
+      s"/* $aiqPropsString */\n$query"
+    } else {
+      query
+    }
+
+    if (jdbcProps.get("aiq_testing").exists(_.toBoolean)) {
+      RedshiftPushDownSqlStatement.capturedQueries.append(finalQuery)
+    }
+    finalQuery
+  }
 }
 
 // scalastyle:off
