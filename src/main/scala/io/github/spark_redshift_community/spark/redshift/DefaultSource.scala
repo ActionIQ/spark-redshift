@@ -19,10 +19,15 @@ package io.github.spark_redshift_community.spark.redshift
 import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import io.github.spark_redshift_community.spark.redshift
+import io.github.spark_redshift_community.spark.redshift.pushdowns.RedshiftPushDownStrategy
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, SchemaRelationProvider}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
+
+import scala.collection.JavaConverters._
 
 /**
  * Redshift Source implementation for Spark SQL
@@ -49,7 +54,16 @@ class DefaultSource(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
+    val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
+    val extraPushdown = jdbcOptions
+      .asProperties
+      .asScala
+      .get("redshift_extra_pushdown")
+      .exists(_.toBoolean)
+    sqlContext.sparkSession.experimental.extraStrategies ++= Seq(
+      new RedshiftPushDownStrategy(extraPushdown)
+    )
+    redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, None, jdbcOptions)(sqlContext)
   }
 
   /**
@@ -60,7 +74,21 @@ class DefaultSource(
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
+    val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
+    val extraPushdown = jdbcOptions
+      .asProperties
+      .asScala
+      .get("redshift_extra_pushdown")
+      .exists(_.toBoolean)
+    sqlContext.sparkSession.experimental.extraStrategies ++= Seq(
+      new RedshiftPushDownStrategy(extraPushdown)
+    )
+    redshift.RedshiftRelation(jdbcWrapper,
+      s3ClientFactory,
+      params,
+      Some(schema),
+      jdbcOptions
+    )(sqlContext)
   }
 
   /**
