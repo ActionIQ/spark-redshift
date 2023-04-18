@@ -46,6 +46,19 @@ class DefaultSource(
    */
   def this() = this(DefaultJDBCWrapper, awsCredentials => new AmazonS3Client(awsCredentials))
 
+  private def appendRedshiftPushDownStrategy(
+    sqlContext: SQLContext,
+    jdbcOptions: JDBCOptions
+  ): Unit = {
+    val extraPushdown = jdbcOptions
+      .asProperties
+      .asScala
+      .get("redshift_extra_pushdown")
+      .exists(_.toBoolean)
+    sqlContext.sparkSession.experimental.extraStrategies ++= Seq(
+      new RedshiftPushDownStrategy(extraPushdown)
+    )
+  }
   /**
    * Create a new RedshiftRelation instance using parameters from Spark SQL DDL. Resolves the schema
    * using JDBC connection over provided URL, which must contain credentials.
@@ -55,14 +68,7 @@ class DefaultSource(
       parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
     val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
-    val extraPushdown = jdbcOptions
-      .asProperties
-      .asScala
-      .get("redshift_extra_pushdown")
-      .exists(_.toBoolean)
-    sqlContext.sparkSession.experimental.extraStrategies ++= Seq(
-      new RedshiftPushDownStrategy(extraPushdown)
-    )
+    appendRedshiftPushDownStrategy(sqlContext, jdbcOptions)
     redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, None, jdbcOptions)(sqlContext)
   }
 
@@ -75,14 +81,7 @@ class DefaultSource(
       schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
     val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
-    val extraPushdown = jdbcOptions
-      .asProperties
-      .asScala
-      .get("redshift_extra_pushdown")
-      .exists(_.toBoolean)
-    sqlContext.sparkSession.experimental.extraStrategies ++= Seq(
-      new RedshiftPushDownStrategy(extraPushdown)
-    )
+    appendRedshiftPushDownStrategy(sqlContext, jdbcOptions)
     redshift.RedshiftRelation(jdbcWrapper,
       s3ClientFactory,
       params,
