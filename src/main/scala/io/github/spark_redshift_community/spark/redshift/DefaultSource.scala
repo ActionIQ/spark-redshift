@@ -27,8 +27,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
-import scala.collection.JavaConverters._
-
 /**
  * Redshift Source implementation for Spark SQL
  */
