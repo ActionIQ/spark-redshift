@@ -228,7 +228,7 @@ private[redshift] case class RedshiftRelation(
     val unloadQuery = s"UNLOAD ('$query') TO '$fixedUrl' WITH CREDENTIALS '$credsString'" +
       s" ESCAPE MANIFEST NULL AS '${params.nullString}'" +
       s" $sseKmsClause"
-    val finalQuery = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, query)
+    val finalQuery = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, unloadQuery)
     log.info(finalQuery)
     finalQuery
   }
