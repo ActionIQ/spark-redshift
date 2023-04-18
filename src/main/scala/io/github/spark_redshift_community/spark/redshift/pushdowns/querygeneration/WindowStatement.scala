@@ -86,10 +86,10 @@ private[querygeneration] object WindowStatement {
 
   // Handle window block.
   private final def windowBlock(
-                                 spec: WindowSpecDefinition,
-                                 fields: Seq[Attribute],
-                                 useWindowFrame: Boolean
-                               ): RedshiftPushDownSqlStatement = {
+    spec: WindowSpecDefinition,
+    fields: Seq[Attribute],
+    useWindowFrame: Boolean
+  ): RedshiftPushDownSqlStatement = {
     val partitionBy =
       if (spec.partitionSpec.isEmpty) {
         new RedshiftPushDownSqlStatement()

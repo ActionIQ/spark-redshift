@@ -25,15 +25,14 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import io.github.spark_redshift_community.spark.redshift.RedshiftPushDownSqlStatement
 
 private[querygeneration] case class QueryHelper(
-                                                 children: Seq[RedshiftPushDownQuery],
-                                                 projections: Option[Seq[NamedExpression]] = None,
-                                                 outputAttributes: Option[Seq[Attribute]],
-                                                 alias: String,
-                                                 conjunctionStatement: RedshiftPushDownSqlStatement = new RedshiftPushDownSqlStatement(),
-                                                 fields: Option[Seq[Attribute]] = None,
-                                                 visibleAttributeOverride: Option[Seq[Attribute]] = None
-                                               ) {
-
+  children: Seq[RedshiftPushDownQuery],
+  projections: Option[Seq[NamedExpression]] = None,
+  outputAttributes: Option[Seq[Attribute]],
+  alias: String,
+  conjunctionStatement: RedshiftPushDownSqlStatement = new RedshiftPushDownSqlStatement(),
+  fields: Option[Seq[Attribute]] = None,
+  visibleAttributeOverride: Option[Seq[Attribute]] = None
+) {
   val colSet: Seq[Attribute] =
     if (fields.isEmpty) {
       children.foldLeft(Seq.empty[Attribute])(

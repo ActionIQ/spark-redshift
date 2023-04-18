@@ -31,20 +31,20 @@ import io.github.spark_redshift_community.spark.redshift._
 
 package object querygeneration {
   private[querygeneration] final def blockStatement(
-                                                     stmt: RedshiftPushDownSqlStatement
-                                                   ): RedshiftPushDownSqlStatement =
+    stmt: RedshiftPushDownSqlStatement
+  ): RedshiftPushDownSqlStatement =
     ConstantString("(") + stmt + ")"
 
   private[querygeneration] final def blockStatement(
-                                                     stmt: RedshiftPushDownSqlStatement,
-                                                     alias: String
-                                                   ): RedshiftPushDownSqlStatement =
+    stmt: RedshiftPushDownSqlStatement,
+    alias: String
+  ): RedshiftPushDownSqlStatement =
     blockStatement(stmt) + "AS" + wrapStatement(alias)
 
   private[querygeneration] final def blockStatementForSourceQuery(
-  stmt: RedshiftPushDownSqlStatement,
-                                                                   alias: String
-                                                                 ): RedshiftPushDownSqlStatement =
+    stmt: RedshiftPushDownSqlStatement,
+    alias: String
+  ): RedshiftPushDownSqlStatement =
     stmt + "AS" + wrapStatement(alias)
 
   /** This adds an attribute as part of a SQL expression, searching in the provided
@@ -56,9 +56,9 @@ package object querygeneration {
    * @return A RedshiftPushDownSqlStatement representing the attribute expression.
    */
   private[querygeneration] final def addAttributeStatement(
-                                                            attr: Attribute,
-                                                            fields: Seq[Attribute]
-                                                          ): RedshiftPushDownSqlStatement = {
+    attr: Attribute,
+    fields: Seq[Attribute]
+  ): RedshiftPushDownSqlStatement = {
     fields.find(e => e.exprId == attr.exprId) match {
       case Some(resolved) =>
         qualifiedAttributeStatement(resolved.qualifier, resolved.name)
@@ -68,9 +68,9 @@ package object querygeneration {
 
   /** Qualifies identifiers with that of the subquery to which it belongs */
   private[querygeneration] final def qualifiedAttribute(
-                                                         alias: Seq[String],
-                                                         name: String
-                                                       ): String = {
+    alias: Seq[String],
+    name: String
+  ): String = {
     val str =
       if (alias.isEmpty) ""
       else alias.map(wrap).mkString(".") + "."
@@ -79,20 +79,20 @@ package object querygeneration {
   }
 
   private[querygeneration] final def qualifiedAttributeStatement(
-                                                                  alias: Seq[String],
-                                                                  name: String
-                                                                ): RedshiftPushDownSqlStatement =
+    alias: Seq[String],
+    name: String
+  ): RedshiftPushDownSqlStatement =
     ConstantString(qualifiedAttribute(alias, name)) !
 
   private[querygeneration] final def wrapStatement(
-                                                    name: String
-                                                  ): RedshiftPushDownSqlStatement =
+    name: String
+  ): RedshiftPushDownSqlStatement =
     ConstantString(name.toUpperCase) !
 
   private[querygeneration] def renameColumns(
-                                              origOutput: Seq[NamedExpression],
-                                              alias: String
-                                            ): Seq[NamedExpression] = {
+    origOutput: Seq[NamedExpression],
+    alias: String
+  ): Seq[NamedExpression] = {
 
     val col_names = Iterator.from(0).map(n => s"COL_$n")
 
@@ -115,9 +115,9 @@ package object querygeneration {
   }
 
   private[querygeneration] final def convertStatement(
-                                                       expression: Expression,
-                                                       fields: Seq[Attribute]
-                                                     ): RedshiftPushDownSqlStatement = {
+    expression: Expression,
+    fields: Seq[Attribute]
+  ): RedshiftPushDownSqlStatement = {
     (expression, fields) match {
       case AggregationStatement(stmt) => stmt
       case BasicStatement(stmt) => stmt
@@ -133,21 +133,23 @@ package object querygeneration {
   }
 
   private[querygeneration] final def convertStatements(
-                                                        fields: Seq[Attribute],
-                                                        expressions: Expression*
-                                                      ): RedshiftPushDownSqlStatement =
+    fields: Seq[Attribute],
+    expressions: Expression*
+  ): RedshiftPushDownSqlStatement =
     mkStatement(expressions.map(convertStatement(_, fields)), ",")
 
   final def mkStatement(
-                         seq: Seq[RedshiftPushDownSqlStatement],
-                         delimiter: RedshiftPushDownSqlStatement
-                       ): RedshiftPushDownSqlStatement =
+    seq: Seq[RedshiftPushDownSqlStatement],
+    delimiter: RedshiftPushDownSqlStatement
+  ): RedshiftPushDownSqlStatement =
     seq.foldLeft(new RedshiftPushDownSqlStatement()) {
       case (left, stmt) =>
         if (left.isEmpty) stmt else left + delimiter + stmt
     }
 
-  final def mkStatement(seq: Seq[RedshiftPushDownSqlStatement],
-                        delimiter: String): RedshiftPushDownSqlStatement =
+  final def mkStatement(
+    seq: Seq[RedshiftPushDownSqlStatement],
+    delimiter: String
+  ): RedshiftPushDownSqlStatement =
     mkStatement(seq, ConstantString(delimiter) !)
 }

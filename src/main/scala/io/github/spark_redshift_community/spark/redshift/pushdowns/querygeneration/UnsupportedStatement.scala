@@ -34,8 +34,8 @@ private[querygeneration] object UnsupportedStatement {
   *         is no match.
   */
   def unapply(
-               expAttr: (Expression, Seq[Attribute])
-             ): Option[RedshiftPushDownSqlStatement] = {
+    expAttr: (Expression, Seq[Attribute])
+  ): Option[RedshiftPushDownSqlStatement] = {
     val expr = expAttr._1
 
     // This exception is not a real issue. It will be caught in
