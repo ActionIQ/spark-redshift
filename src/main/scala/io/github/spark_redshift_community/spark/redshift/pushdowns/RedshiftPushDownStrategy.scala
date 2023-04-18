@@ -26,13 +26,14 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkPlan
 import io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration.QueryBuilder
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.InternalRow
 
 // Entry point of the pushdowns, taking in a logical plan and returns a spark physical plan.
-class RedshiftPushDownStrategy(extraPushdown: Boolean) extends Strategy {
+class RedshiftPushDownStrategy(conf: SparkConf) extends Strategy {
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = {
-    if (extraPushdown) {
+    if (conf.get("spark.aiq.sql.enable_jdbc_pushdown", "false").toBoolean) {
       try {
         buildQuery(plan.transform({
           case Project(Nil, child) => child

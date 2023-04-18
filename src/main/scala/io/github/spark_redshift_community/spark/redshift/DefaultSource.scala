@@ -48,15 +48,9 @@ class DefaultSource(
 
   private def appendRedshiftPushDownStrategy(
     sqlContext: SQLContext,
-    jdbcOptions: JDBCOptions
   ): Unit = {
-    val extraPushdown = jdbcOptions
-      .asProperties
-      .asScala
-      .get("redshift_extra_pushdown")
-      .exists(_.toBoolean)
     sqlContext.sparkSession.experimental.extraStrategies ++= Seq(
-      new RedshiftPushDownStrategy(extraPushdown)
+      new RedshiftPushDownStrategy(sqlContext.sparkContext.getConf)
     )
   }
   /**
@@ -68,7 +62,7 @@ class DefaultSource(
       parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
     val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
-    appendRedshiftPushDownStrategy(sqlContext, jdbcOptions)
+    appendRedshiftPushDownStrategy(sqlContext)
     redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, None, jdbcOptions)(sqlContext)
   }
 
@@ -81,7 +75,7 @@ class DefaultSource(
       schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
     val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
-    appendRedshiftPushDownStrategy(sqlContext, jdbcOptions)
+    appendRedshiftPushDownStrategy(sqlContext)
     redshift.RedshiftRelation(jdbcWrapper,
       s3ClientFactory,
       params,
