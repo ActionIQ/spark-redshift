@@ -109,9 +109,10 @@ private[redshift] case class RedshiftRelation(
     }
   }
 
-  private def executeUnloadQuery(query: String,
-                                 schema: StructType
-                                ): RDD[InternalRow] = {
+  private def executeUnloadQuery(
+    query: String,
+    schema: StructType
+  ): RDD[InternalRow] = {
     // Unload data from Redshift into a temporary directory in S3:
     val tempDir = params.createPerQueryTempDir()
     val unloadSql = buildUnloadStmt(query, tempDir, creds, params.sseKmsKey)
@@ -173,8 +174,10 @@ private[redshift] case class RedshiftRelation(
     Utils.checkThatBucketHasObjectLifecycleConfiguration(params.rootTempDir, s3ClientFactory(creds))
   }
 
-  def buildRDDFromSQL(statement: RedshiftPushDownSqlStatement,
-                      schema: StructType): RDD[InternalRow] = {
+  def buildRDDFromSQL(
+    statement: RedshiftPushDownSqlStatement,
+    schema: StructType
+  ): RDD[InternalRow] = {
     val queryString = statement.toString
     log.info(s"Executing query with extra pushdown ${queryString} in redshift")
     if (queryString.contains("COUNT(")) {
@@ -186,8 +189,7 @@ private[redshift] case class RedshiftRelation(
     }
   }
 
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter])
-  : RDD[Row] = {
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     checkS3Setting()
     if (requiredColumns.isEmpty) {
       // In the special case where no columns were requested, issue a `count(*)` against Redshift
@@ -214,10 +216,11 @@ private[redshift] case class RedshiftRelation(
   override def needConversion: Boolean = false
 
   private def buildUnloadStmt(
-      query: String,
-      tempDir: String,
-      creds: AWSCredentialsProvider,
-      sseKmsKey: Option[String]): String = {
+    query: String,
+    tempDir: String,
+    creds: AWSCredentialsProvider,
+    sseKmsKey: Option[String]
+  ): String = {
     val credsString: String =
       AWSCredentialsUtils.getRedshiftCredentialsString(params, creds.getCredentials)
     // We need to remove S3 credentials from the unload path URI because they will conflict with

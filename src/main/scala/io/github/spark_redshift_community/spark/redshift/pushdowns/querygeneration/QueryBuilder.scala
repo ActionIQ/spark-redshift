@@ -175,8 +175,10 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
 
 private[redshift] object QueryBuilder {
 
-  final def convertProjections(projections: Seq[Expression],
-                               output: Seq[Attribute]): Seq[NamedExpression] = {
+  final def convertProjections(
+    projections: Seq[Expression],
+    output: Seq[Attribute]
+  ): Seq[NamedExpression] = {
     projections zip output map { expr =>
       expr._1 match {
         case e: NamedExpression => e
@@ -186,8 +188,8 @@ private[redshift] object QueryBuilder {
   }
 
   def getRDDFromPlan(
-                      plan: LogicalPlan
-                    ): Option[(Seq[Attribute], RDD[InternalRow])] = {
+    plan: LogicalPlan
+  ): Option[(Seq[Attribute], RDD[InternalRow])] = {
     val qb = new QueryBuilder(plan)
 
     qb.tryBuild.map { executedBuilder =>

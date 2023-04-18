@@ -96,10 +96,9 @@ object RedshiftPushDownSqlStatement {
 // scalastyle:off
 // https://stackoverflow.com/questions/2265503/why-do-i-need-to-override-the-equals-and-hashcode-methods-in-java
 private[redshift] class RedshiftPushDownSqlStatement(
-                                          val numOfVar: Int = 0,
-                                          val list: List[StatementElement] = Nil
-                                        )
-  extends Serializable {
+  val numOfVar: Int = 0,
+  val list: List[StatementElement] = Nil
+) extends Serializable {
   def +(element: StatementElement): RedshiftPushDownSqlStatement =
     new RedshiftPushDownSqlStatement(numOfVar + element.isVariable, element :: list)
 
