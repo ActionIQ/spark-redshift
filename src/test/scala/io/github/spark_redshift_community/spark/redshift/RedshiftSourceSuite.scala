@@ -18,7 +18,6 @@ package io.github.spark_redshift_community.spark.redshift
 
 import java.io.{ByteArrayInputStream, OutputStreamWriter}
 import java.net.URI
-
 import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.model.{BucketLifecycleConfiguration, S3Object, S3ObjectInputStream}
 import com.amazonaws.services.s3.model.BucketLifecycleConfiguration.Rule
@@ -28,7 +27,6 @@ import org.mockito.Matchers._
 import org.mockito.Mockito
 import org.mockito.Mockito.when
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.fs.UnsupportedFileSystemException
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
@@ -38,6 +36,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 
 /**
@@ -403,7 +403,8 @@ class RedshiftSourceSuite
       mockRedshift.jdbcWrapper,
       _ => mockS3Client,
       Parameters.mergeParameters(params),
-      userSchema = None)(testSqlContext)
+      userSchema = None,
+      new JDBCOptions(CaseInsensitiveMap(Map("aiq_testing"-> "true"))))(testSqlContext)
     relation.asInstanceOf[InsertableRelation].insert(expectedDataDF, overwrite = true)
 
     // Make sure we wrote the data out ready for Redshift load, in the expected formats.
