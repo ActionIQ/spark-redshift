@@ -55,8 +55,7 @@ lazy val root = Project("spark-redshift", file("."))
       // A Redshift-compatible JDBC driver must be present on the classpath for spark-redshift to work.
       // For testing, we use an Amazon driver, which is available from
       // http://docs.aws.amazon.com/redshift/latest/mgmt/configure-jdbc-connection.html
-      "com.amazon.redshift" % "jdbc41" % "1.2.27.1051" % "test" from "https://s3.amazonaws.com/redshift-downloads/drivers/jdbc/1.2.27.1051/RedshiftJDBC41-no-awssdk-1.2.27.1051.jar",
-
+      "com.amazon.redshift" % "jdbc42" % "2.1.0.14" % "test" from "https://s3.amazonaws.com/redshift-downloads/drivers/jdbc/2.1.0.14/redshift-jdbc42-2.1.0.14.jar",
       "com.google.guava" % "guava" % "27.0.1-jre" % "test",
       "org.scalatest" %% "scalatest" % "3.0.5" % "test",
       "org.mockito" % "mockito-core" % "1.10.19" % "test",
