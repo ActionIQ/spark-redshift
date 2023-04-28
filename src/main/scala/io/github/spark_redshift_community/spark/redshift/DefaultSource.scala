@@ -91,13 +91,14 @@ class DefaultSource(
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
+    val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
     val table = params.table.getOrElse {
       throw new IllegalArgumentException(
         "For save operations you must specify a Redshift table name with the 'dbtable' parameter")
     }
 
     def tableExists: Boolean = {
-      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params.credentials)
+      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, jdbcOptions)
       try {
         jdbcWrapper.tableExists(conn, table.toString)
       } finally {
@@ -126,7 +127,7 @@ class DefaultSource(
     if (doSave) {
       val updatedParams = parameters.updated("overwrite", dropExisting.toString)
       new RedshiftWriter(jdbcWrapper, s3ClientFactory).saveToRedshift(
-        sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams))
+        sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams), jdbcOptions)
     }
 
     createRelation(sqlContext, parameters)

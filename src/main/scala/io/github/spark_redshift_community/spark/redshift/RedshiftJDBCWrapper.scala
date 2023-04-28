@@ -17,19 +17,17 @@
 
 package io.github.spark_redshift_community.spark.redshift
 
-import java.sql.{ResultSet, PreparedStatement, Connection, Driver, DriverManager, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{ThreadFactory, Executors}
-
+import java.util.concurrent.{Executors, ThreadFactory}
 import scala.collection.JavaConverters._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import org.apache.spark.SPARK_VERSION
-import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 
@@ -199,7 +197,7 @@ private[redshift] class JDBCWrapper {
   def getConnector(
       userProvidedDriverClass: Option[String],
       url: String,
-      credentials: Option[(String, String)]) : Connection = {
+      jdbcOptions: JDBCOptions) : Connection = {
     val subprotocol = url.stripPrefix("jdbc:").split(":")(0)
     val driverClass: String = getDriverClass(subprotocol, userProvidedDriverClass)
     DriverRegistry.register(driverClass)
@@ -224,12 +222,7 @@ private[redshift] class JDBCWrapper {
     }.getOrElse {
       throw new IllegalArgumentException(s"Did not find registered driver with class $driverClass")
     }
-    val properties = new Properties()
-    credentials.foreach { case(user, password) =>
-      properties.setProperty("user", user)
-      properties.setProperty("password", password)
-    }
-    driver.connect(url, properties)
+    driver.connect(url, jdbcOptions.asConnectionProperties)
   }
 
   /**
