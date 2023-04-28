@@ -29,7 +29,7 @@ import scala.concurrent.duration.Duration
 import scala.util.Try
 import scala.util.control.NonFatal
 import org.apache.spark.SPARK_VERSION
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
+import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 
