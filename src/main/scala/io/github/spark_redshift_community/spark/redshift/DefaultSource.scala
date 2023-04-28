@@ -91,7 +91,6 @@ class DefaultSource(
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
     val table = params.table.getOrElse {
       throw new IllegalArgumentException(
         "For save operations you must specify a Redshift table name with the 'dbtable' parameter")
