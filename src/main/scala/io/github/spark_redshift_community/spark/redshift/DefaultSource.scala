@@ -98,7 +98,7 @@ class DefaultSource(
     }
 
     def tableExists: Boolean = {
-      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, jdbcOptions)
+      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params)
       try {
         jdbcWrapper.tableExists(conn, table.toString)
       } finally {

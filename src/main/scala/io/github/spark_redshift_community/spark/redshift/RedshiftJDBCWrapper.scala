@@ -17,6 +17,8 @@
 
 package io.github.spark_redshift_community.spark.redshift
 
+import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
+
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
@@ -197,7 +199,7 @@ private[redshift] class JDBCWrapper {
   def getConnector(
       userProvidedDriverClass: Option[String],
       url: String,
-      jdbcOptions: JDBCOptions) : Connection = {
+      mergedParameters: MergedParameters) : Connection = {
     val subprotocol = url.stripPrefix("jdbc:").split(":")(0)
     val driverClass: String = getDriverClass(subprotocol, userProvidedDriverClass)
     DriverRegistry.register(driverClass)
@@ -222,7 +224,12 @@ private[redshift] class JDBCWrapper {
     }.getOrElse {
       throw new IllegalArgumentException(s"Did not find registered driver with class $driverClass")
     }
-    driver.connect(url, jdbcOptions.asConnectionProperties)
+    val properties = new Properties()
+    mergedParameters.parameters.foreach { case (key, value) =>
+      log.info(s"key: ${key} value ${value}")
+      properties.setProperty(key, value)
+    }
+    driver.connect(url, properties)
   }
 
   /**

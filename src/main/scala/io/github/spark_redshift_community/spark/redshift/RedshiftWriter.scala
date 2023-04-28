@@ -404,7 +404,7 @@ private[redshift] class RedshiftWriter(
       tempDir = params.createPerQueryTempDir(),
       tempFormat = params.tempFormat,
       nullString = params.nullString)
-    val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, jdbcOptions)
+    val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params)
     conn.setAutoCommit(false)
     try {
       val table: TableName = params.table.get
