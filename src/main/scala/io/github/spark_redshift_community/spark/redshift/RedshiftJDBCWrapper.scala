@@ -225,7 +225,6 @@ private[redshift] class JDBCWrapper {
     }
     val properties = new Properties()
     mergedParameters.parameters.foreach { case (key, value) =>
-      log.info(s"key: ${key} value ${value}")
       properties.setProperty(key, value)
     }
     driver.connect(url, properties)
