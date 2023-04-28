@@ -63,7 +63,7 @@ private[redshift] case class RedshiftRelation(
     userSchema.getOrElse {
       val tableNameOrSubquery =
         params.query.map(q => s"($q)").orElse(params.table.map(_.toString)).get
-      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params)
+      val conn = jdbcWrapper.getConnector(params)
       try {
         jdbcWrapper.resolveTable(conn, tableNameOrSubquery)
       } finally {
@@ -89,7 +89,7 @@ private[redshift] case class RedshiftRelation(
   }
 
   private def executeCountQuery(query: String): RDD[InternalRow] = {
-    val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params)
+    val conn = jdbcWrapper.getConnector(params)
     val queryWithTag = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, query)
     try {
       val results = jdbcWrapper.executeQueryInterruptibly(conn.prepareStatement(queryWithTag))
@@ -116,7 +116,7 @@ private[redshift] case class RedshiftRelation(
     // Unload data from Redshift into a temporary directory in S3:
     val tempDir = params.createPerQueryTempDir()
     val unloadSql = buildUnloadStmt(query, tempDir, creds, params.sseKmsKey)
-    val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params)
+    val conn = jdbcWrapper.getConnector(params)
     try {
       jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
     } finally {

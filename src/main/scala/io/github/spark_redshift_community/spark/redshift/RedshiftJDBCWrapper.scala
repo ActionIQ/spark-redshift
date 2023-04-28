@@ -196,10 +196,9 @@ private[redshift] class JDBCWrapper {
    *                                discover the appropriate driver class.
    * @param url the JDBC url to connect to.
    */
-  def getConnector(
-      userProvidedDriverClass: Option[String],
-      url: String,
-      mergedParameters: MergedParameters) : Connection = {
+  def getConnector(mergedParameters: MergedParameters) : Connection = {
+    val url = mergedParameters.jdbcUrl
+    val userProvidedDriverClass = mergedParameters.jdbcDriver
     val subprotocol = url.stripPrefix("jdbc:").split(":")(0)
     val driverClass: String = getDriverClass(subprotocol, userProvidedDriverClass)
     DriverRegistry.register(driverClass)
