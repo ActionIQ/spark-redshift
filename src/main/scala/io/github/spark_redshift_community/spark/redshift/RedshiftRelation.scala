@@ -81,7 +81,7 @@ private[redshift] case class RedshiftRelation(
       SaveMode.Append
     }
     val writer = new RedshiftWriter(jdbcWrapper, s3ClientFactory)
-    writer.saveToRedshift(sqlContext, data, saveMode, params, jdbcOptions)
+    writer.saveToRedshift(sqlContext, data, saveMode, params)
   }
 
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {

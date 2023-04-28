@@ -344,8 +344,7 @@ private[redshift] class RedshiftWriter(
       sqlContext: SQLContext,
       data: DataFrame,
       saveMode: SaveMode,
-      params: MergedParameters,
-      jdbcOptions: JDBCOptions) : Unit = {
+      params: MergedParameters) : Unit = {
     if (params.table.isEmpty) {
       throw new IllegalArgumentException(
         "For save operations you must specify a Redshift table name with the 'dbtable' parameter")

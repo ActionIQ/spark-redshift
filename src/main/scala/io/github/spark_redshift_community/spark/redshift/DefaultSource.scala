@@ -127,7 +127,7 @@ class DefaultSource(
     if (doSave) {
       val updatedParams = parameters.updated("overwrite", dropExisting.toString)
       new RedshiftWriter(jdbcWrapper, s3ClientFactory).saveToRedshift(
-        sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams), jdbcOptions)
+        sqlContext, data, saveMode, Parameters.mergeParameters(updatedParams))
     }
 
     createRelation(sqlContext, parameters)
