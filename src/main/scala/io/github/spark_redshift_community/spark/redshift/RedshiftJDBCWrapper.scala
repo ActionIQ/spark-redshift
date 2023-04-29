@@ -17,17 +17,17 @@
 
 package io.github.spark_redshift_community.spark.redshift
 
-import java.sql.{ResultSet, PreparedStatement, Connection, Driver, DriverManager, ResultSetMetaData, SQLException}
+import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
+
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{ThreadFactory, Executors}
-
+import java.util.concurrent.{Executors, ThreadFactory}
 import scala.collection.JavaConverters._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 import org.apache.spark.sql.types._
@@ -196,10 +196,9 @@ private[redshift] class JDBCWrapper {
    *                                discover the appropriate driver class.
    * @param url the JDBC url to connect to.
    */
-  def getConnector(
-      userProvidedDriverClass: Option[String],
-      url: String,
-      credentials: Option[(String, String)]) : Connection = {
+  def getConnector(mergedParameters: MergedParameters) : Connection = {
+    val url = mergedParameters.jdbcUrl
+    val userProvidedDriverClass = mergedParameters.jdbcDriver
     val subprotocol = url.stripPrefix("jdbc:").split(":")(0)
     val driverClass: String = getDriverClass(subprotocol, userProvidedDriverClass)
     DriverRegistry.register(driverClass)
@@ -225,9 +224,8 @@ private[redshift] class JDBCWrapper {
       throw new IllegalArgumentException(s"Did not find registered driver with class $driverClass")
     }
     val properties = new Properties()
-    credentials.foreach { case(user, password) =>
-      properties.setProperty("user", user)
-      properties.setProperty("password", password)
+    mergedParameters.parameters.foreach { case (key, value) =>
+      properties.setProperty(key, value)
     }
     driver.connect(url, properties)
   }

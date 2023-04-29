@@ -18,7 +18,6 @@ package io.github.spark_redshift_community.spark.redshift
 
 import java.net.URI
 import java.sql.{Connection, Date, SQLException, Timestamp}
-
 import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
@@ -29,7 +28,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
-import scala.collection.mutable
 import scala.util.control.NonFatal
 
 /**
@@ -403,7 +401,7 @@ private[redshift] class RedshiftWriter(
       tempDir = params.createPerQueryTempDir(),
       tempFormat = params.tempFormat,
       nullString = params.nullString)
-    val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params.credentials)
+    val conn = jdbcWrapper.getConnector(params)
     conn.setAutoCommit(false)
     try {
       val table: TableName = params.table.get
