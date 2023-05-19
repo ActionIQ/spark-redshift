@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import com.typesafe.sbt.pgp.PgpKeys
 import org.scalastyle.sbt.ScalastylePlugin.rawScalastyleSettings
 import sbt.Keys._
 import sbt._
@@ -22,7 +21,7 @@ import sbtrelease.ReleasePlugin.autoImport.ReleaseTransformations._
 import sbtrelease.ReleasePlugin.autoImport._
 import scoverage.ScoverageKeys
 
-val sparkVersion = "3.2.0"
+val sparkVersion = "3.3.2"
 
 // Define a custom test configuration so that unit test helper classes can be re-used under
 // the integration tests configuration; see http://stackoverflow.com/a/20635808.
@@ -35,18 +34,17 @@ val testAWSJavaSDKVersion = sys.props.get("aws.testVersion").getOrElse("1.11.103
 
 lazy val root = Project("spark-redshift", file("."))
   .configs(IntegrationTest)
-  .settings(net.virtualvoid.sbt.graph.Plugin.graphSettings: _*)
   .settings(Project.inConfig(IntegrationTest)(rawScalastyleSettings()): _*)
   .settings(Defaults.coreDefaultSettings: _*)
   .settings(Defaults.itSettings: _*)
+  .enablePlugins(PublishToArtifactory)
   .settings(
     name := "spark-redshift",
     organization := "io.github.spark-redshift-community",
     scalaVersion := "2.12.15",
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
-    credentials += Credentials(Path.userHome / ".sbt" / ".credentials"),
-    scalacOptions ++= Seq("-target:jvm-1.8"),
-    javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+    scalacOptions ++= Seq("-release", "17"),
+    javacOptions ++= Seq("-source", "17", "-target", "17"),
     libraryDependencies ++= Seq(
       "org.slf4j" % "slf4j-api" % "1.7.32",
       "com.eclipsesource.minimal-json" % "minimal-json" % "0.9.4",
@@ -56,7 +54,7 @@ lazy val root = Project("spark-redshift", file("."))
       // http://docs.aws.amazon.com/redshift/latest/mgmt/configure-jdbc-connection.html
       "com.amazon.redshift" % "jdbc41" % "1.2.27.1051" % "test" from "https://s3.amazonaws.com/redshift-downloads/drivers/jdbc/1.2.27.1051/RedshiftJDBC41-no-awssdk-1.2.27.1051.jar",
 
-      "com.google.guava" % "guava" % "27.0.1-jre" % "test",
+      "com.google.guava" % "guava" % "20.0" % "test",
       "org.scalatest" %% "scalatest" % "3.0.5" % "test",
       "org.mockito" % "mockito-core" % "1.10.19" % "test",
 
@@ -82,24 +80,11 @@ lazy val root = Project("spark-redshift", file("."))
     // Display full-length stacktraces from ScalaTest:
     testOptions in Test += Tests.Argument("-oF"),
     fork in Test := true,
-    javaOptions in Test ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M"),
-
-    /********************
-     * Release settings *
-     ********************/
-
-    publishTo := {
-      val nexus = "https://oss.sonatype.org/"
-      if (isSnapshot.value)
-        Some("snapshots" at nexus + "content/repositories/snapshots")
-      else
-        Some("releases"  at nexus + "service/local/staging/deploy/maven2")
-    },
+    javaOptions in Test ++= Seq("-Xms512M", "-Xmx2048M"),
 
     publishMavenStyle := true,
     releaseCrossBuild := true,
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0")),
-    releasePublishArtifactsAction := PgpKeys.publishSigned.value,
 
     pomExtra :=
     <url>https://github.com:spark_redshift_community/spark.redshift</url>
@@ -129,8 +114,6 @@ lazy val root = Project("spark-redshift", file("."))
         <url>https://github.com/lucagiovagnoli</url>
       </developer>
     </developers>,
-
-    bintrayReleaseOnPublish in ThisBuild := false,
 
     // Add publishing to spark packages as another step.
     releaseProcess := Seq[ReleaseStep](
