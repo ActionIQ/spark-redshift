@@ -27,9 +27,9 @@ val sparkVersion = "3.3.2"
 // the integration tests configuration; see http://stackoverflow.com/a/20635808.
 lazy val IntegrationTest = config("it") extend Test
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
-val testHadoopVersion = sys.props.get("hadoop.testVersion").getOrElse("3.2.1")
+val testHadoopVersion = sys.props.get("hadoop.testVersion").getOrElse("3.3.2")
 // DON't UPGRADE AWS-SDK-JAVA if not compatible with hadoop version
-val testAWSJavaSDKVersion = sys.props.get("aws.testVersion").getOrElse("1.11.1033")
+val testAWSJavaSDKVersion = sys.props.get("aws.testVersion").getOrElse("1.11.1026")
 
 
 lazy val root = Project("spark-redshift", file("."))
@@ -68,7 +68,7 @@ lazy val root = Project("spark-redshift", file("."))
       "org.apache.hadoop" % "hadoop-aws" % testHadoopVersion excludeAll
         (ExclusionRule(organization = "com.fasterxml.jackson.core"))
         exclude("org.apache.hadoop", "hadoop-common")
-        exclude("com.amazonaws", "aws-java-sdk-s3")  force(),
+        exclude("com.amazonaws", "aws-java-sdk-bundle")  force(), // load from provided aws-java-sdk-* instead of bundle
 
       "org.apache.spark" %% "spark-core" % testSparkVersion % "provided" exclude("org.apache.hadoop", "hadoop-client") force(),
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided" exclude("org.apache.hadoop", "hadoop-client") force(),
@@ -80,7 +80,15 @@ lazy val root = Project("spark-redshift", file("."))
     // Display full-length stacktraces from ScalaTest:
     testOptions in Test += Tests.Argument("-oF"),
     fork in Test := true,
-    javaOptions in Test ++= Seq("-Xms512M", "-Xmx2048M"),
+    javaOptions in Test ++= Seq(
+      "-Xms512M", "-Xmx2048M",
+      "--add-opens=java.base/java.nio=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+      "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+      "--add-opens=java.base/java.util=ALL-UNNAMED",
+    ),
 
     publishMavenStyle := true,
     releaseCrossBuild := true,
