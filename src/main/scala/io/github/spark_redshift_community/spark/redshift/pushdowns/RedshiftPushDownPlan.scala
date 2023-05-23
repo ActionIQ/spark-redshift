@@ -16,7 +16,7 @@
  */
 
 // scalastyle:off line.size.limit
-// https://github.com/ActionIQ-OSS/spark-snowflake/blob/spark_2.4/src/main/scala/net/snowflake/spark/snowflake/pushdowns/SnowflakePlan.scala
+// https://github.com/ActionIQ/spark-snowflake/blob/spark_3.3n/src/main/scala/net/snowflake/spark/snowflake/pushdowns/SnowflakePlan.scala
 // scalastyle:on line.size.limit
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns
@@ -39,5 +39,12 @@ case class RedshiftPushDownPlan(output: Seq[Attribute], rdd: RDD[InternalRow]) e
       val project = UnsafeProjection.create(schema)
       iter.map(project)
     }
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan = {
+    if (newChildren.nonEmpty) {
+      throw new IllegalArgumentException("withNewChildrenInternal() is called")
+    }
+    this
   }
 }

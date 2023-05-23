@@ -49,6 +49,8 @@ private[redshift] case class RedshiftRelation(
 
   private val log = LoggerFactory.getLogger(getClass)
 
+  private val creds = AWSCredentialsUtils.load(params, sqlContext.sparkContext.hadoopConfiguration)
+
   if (sqlContext != null) {
     Utils.assertThatFileSystemIsNotS3BlockFileSystem(
       new URI(params.rootTempDir), sqlContext.sparkContext.hadoopConfiguration)
@@ -94,11 +96,10 @@ private[redshift] case class RedshiftRelation(
       if (results.next()) {
         val numRows = results.getLong(1)
         val parallelism = sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
-        val emptyRow = RowEncoder(StructType(Seq.empty)).toRow(Row(Seq.empty))
+        val emptyRow = RowEncoder(StructType(Seq.empty)).createSerializer().apply(Row(Seq.empty))
         sqlContext.sparkContext
           .parallelize(1L to numRows, parallelism)
           .map(_ => emptyRow)
-
       } else {
         throw new IllegalStateException("Could not read count from Redshift")
       }

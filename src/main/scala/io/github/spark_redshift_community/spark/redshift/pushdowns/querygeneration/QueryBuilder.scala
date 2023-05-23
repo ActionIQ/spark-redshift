@@ -138,8 +138,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
         generateQueries(left).flatMap { l =>
           generateQueries(right) map { r =>
             plan match {
-              // The 5th parameter is new from spark 3.0
-              case Join(_, _, joinType, condition) =>
+              case Join(_, _, joinType, condition, _) =>
                 joinType match {
                   case Inner | LeftOuter | RightOuter | FullOuter =>
                     JoinQueryRedshift(l, r, condition, joinType, alias.next)
@@ -153,9 +152,11 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
           }
         }
 
-      // On Spark 2.4, Union() has 1 parameter only.
-      case Union(children) =>
-        Some(UnionQueryRedshift(children, alias.next))
+      case Union(children, byName, allowMissingCol) =>
+        if (byName || allowMissingCol) {
+          throw new IllegalArgumentException("Union by name not supported by Redshift")
+        } else { Some(UnionQueryRedshift(children, alias.next)) }
+
 
       case Expand(projections, output, child) =>
         val children = projections.map { p =>

@@ -18,6 +18,7 @@ package io.github.spark_redshift_community.spark.redshift
 
 import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
 
+import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
 import org.apache.spark.sql.types.StructType
 import org.mockito.Matchers._
 import org.mockito.Mockito._
@@ -69,7 +70,7 @@ class MockRedshift(
   doAnswer(new Answer[Connection] {
       override def answer(invocation: InvocationOnMock): Connection = createMockConnection()
     }).when(jdbcWrapper)
-      .getConnector(any[Option[String]](), same(jdbcUrl), any[Option[(String, String)]]())
+      .getConnector(any[MergedParameters]())
 
   doAnswer(new Answer[Boolean] {
     override def answer(invocation: InvocationOnMock): Boolean = {

@@ -55,12 +55,11 @@ private[querygeneration] object StringStatement {
             convertStatement(rightSide, fields)
         )
 
-      // ESCAPE Char is supported from Spark 3.0
-      case Like(left, right) =>
+      case Like(left, right, escapeChar) =>
         convertStatement(left, fields) + "LIKE" + convertStatement(
           right,
           fields
-        )
+        ) + s"ESCAPE '$escapeChar'"
 
       case _ => null
     })

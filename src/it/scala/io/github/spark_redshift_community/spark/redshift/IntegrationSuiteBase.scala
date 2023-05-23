@@ -26,6 +26,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types.StructType
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
+import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
+
 import scala.util.Random
 
 
@@ -62,6 +64,16 @@ trait IntegrationSuiteBase
     s"$AWS_REDSHIFT_JDBC_URL?user=$AWS_REDSHIFT_USER&password=$AWS_REDSHIFT_PASSWORD&ssl=true"
   }
 
+  protected def param: MergedParameters = {
+    MergedParameters(
+      Map(
+        "url" -> jdbcUrlNoUserPassword,
+        "user" -> AWS_REDSHIFT_USER,
+        "password" -> AWS_REDSHIFT_PASSWORD
+      )
+    )
+  }
+
   protected def jdbcUrlNoUserPassword: String = {
     s"$AWS_REDSHIFT_JDBC_URL?ssl=true"
   }
@@ -91,7 +103,7 @@ trait IntegrationSuiteBase
     sc.hadoopConfiguration.set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
     sc.hadoopConfiguration.set("fs.s3a.access.key", AWS_ACCESS_KEY_ID)
     sc.hadoopConfiguration.set("fs.s3a.secret.key", AWS_SECRET_ACCESS_KEY)
-    conn = DefaultJDBCWrapper.getConnector(None, jdbcUrl, None)
+    conn = DefaultJDBCWrapper.getConnector(param)
   }
 
   override def afterAll(): Unit = {

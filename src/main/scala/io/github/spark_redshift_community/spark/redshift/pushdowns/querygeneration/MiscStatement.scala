@@ -35,7 +35,8 @@ private[querygeneration] object MiscStatement {
     Option(expr match {
       case Alias(child: Expression, name: String) =>
         blockStatement(convertStatement(child, fields), name)
-      case Cast(child, t, _) =>
+      // redshift is ANSI-compliant
+      case Cast(child, t, _, _) =>
         getCastType(t) match {
           case Some(cast) =>
             (child.dataType, t) match {
@@ -74,8 +75,7 @@ private[querygeneration] object MiscStatement {
       case InSet(child, hset) =>
         convertStatement(In(child, setToExpr(hset)), fields)
 
-      // The 4th parameter is new from spark 3.0
-      case MakeDecimal(child, precision, scale) =>
+      case MakeDecimal(child, precision, scale, _) =>
         ConstantString("TO_DECIMAL") + blockStatement(
           blockStatement(
             convertStatement(child, fields) + "/ POW(10," +
@@ -96,7 +96,7 @@ private[querygeneration] object MiscStatement {
       case SortOrder(child, Descending, _, _) =>
         blockStatement(convertStatement(child, fields)) + "DESC"
 
-      case ScalarSubquery(subquery, _, _) =>
+      case ScalarSubquery(subquery, _, _, joinCond) if joinCond.isEmpty =>
         blockStatement(new QueryBuilder(subquery).statement)
 
       case UnscaledValue(child) =>
