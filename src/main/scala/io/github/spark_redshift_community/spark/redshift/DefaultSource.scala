@@ -19,6 +19,9 @@ package io.github.spark_redshift_community.spark.redshift
 import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import io.github.spark_redshift_community.spark.redshift
+import io.github.spark_redshift_community.spark.redshift.pushdowns.RedshiftPushDownStrategy
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, SchemaRelationProvider}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
@@ -41,6 +44,13 @@ class DefaultSource(
    */
   def this() = this(DefaultJDBCWrapper, awsCredentials => new AmazonS3Client(awsCredentials))
 
+  private def appendRedshiftPushDownStrategy(
+    sqlContext: SQLContext,
+  ): Unit = {
+    sqlContext.sparkSession.experimental.extraStrategies ++= Seq(
+      new RedshiftPushDownStrategy(sqlContext.sparkContext.getConf)
+    )
+  }
   /**
    * Create a new RedshiftRelation instance using parameters from Spark SQL DDL. Resolves the schema
    * using JDBC connection over provided URL, which must contain credentials.
@@ -49,7 +59,9 @@ class DefaultSource(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, None)(sqlContext)
+    val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
+    appendRedshiftPushDownStrategy(sqlContext)
+    redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, None, jdbcOptions)(sqlContext)
   }
 
   /**
@@ -60,7 +72,14 @@ class DefaultSource(
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
     val params = Parameters.mergeParameters(parameters)
-    redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, Some(schema))(sqlContext)
+    val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
+    appendRedshiftPushDownStrategy(sqlContext)
+    redshift.RedshiftRelation(jdbcWrapper,
+      s3ClientFactory,
+      params,
+      Some(schema),
+      jdbcOptions
+    )(sqlContext)
   }
 
   /**
@@ -78,7 +97,7 @@ class DefaultSource(
     }
 
     def tableExists: Boolean = {
-      val conn = jdbcWrapper.getConnector(params.jdbcDriver, params.jdbcUrl, params.credentials)
+      val conn = jdbcWrapper.getConnector(params)
       try {
         jdbcWrapper.tableExists(conn, table.toString)
       } finally {

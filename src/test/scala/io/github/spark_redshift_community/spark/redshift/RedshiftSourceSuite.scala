@@ -38,6 +38,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 
 /**
@@ -403,7 +405,8 @@ class RedshiftSourceSuite
       mockRedshift.jdbcWrapper,
       _ => mockS3Client,
       Parameters.mergeParameters(params),
-      userSchema = None)(testSqlContext)
+      userSchema = None,
+      new JDBCOptions(CaseInsensitiveMap(Map("aiq_testing"-> "true"))))(testSqlContext)
     relation.asInstanceOf[InsertableRelation].insert(expectedDataDF, overwrite = true)
 
     // Make sure we wrote the data out ready for Redshift load, in the expected formats.
