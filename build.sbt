@@ -29,7 +29,7 @@ lazy val IntegrationTest = config("it") extend Test
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val testHadoopVersion = sys.props.get("hadoop.testVersion").getOrElse("3.3.2")
 // DON't UPGRADE AWS-SDK-JAVA if not compatible with hadoop version
-val testAWSJavaSDKVersion = sys.props.get("aws.testVersion").getOrElse("1.11.1026")
+val testAWSJavaSDKVersion = sys.props.get("aws.testVersion").getOrElse("1.12.31")
 
 
 lazy val root = Project("spark-redshift", file("."))
