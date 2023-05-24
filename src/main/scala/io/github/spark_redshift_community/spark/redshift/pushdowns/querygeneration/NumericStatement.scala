@@ -75,10 +75,10 @@ private[querygeneration] object NumericStatement {
       // Suppose connector can't see Pi().
       case Pi() => ConstantString("PI()") !
 
-      case Rand(seed, hideSeed) =>
-        val seedVar = LongVariable(Option(seed).map(_.asInstanceOf[Long]))
-        val blockStmt = if (hideSeed) blockStatement(seedVar !, "RANDOM()") else blockStatement(seedVar !)
-        ConstantString("RANDOM") + blockStmt
+      case Rand(seed, _) =>
+        ConstantString("RANDOM") + blockStatement(
+          LongVariable(Option(seed).map(_.asInstanceOf[Long])) !
+        )
 
       case Round(child, scale) =>
         ConstantString("ROUND") + blockStatement(
