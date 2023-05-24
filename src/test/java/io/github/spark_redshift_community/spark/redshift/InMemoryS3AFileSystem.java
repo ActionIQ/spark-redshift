@@ -205,15 +205,17 @@ public class InMemoryS3AFileSystem extends FileSystem {
                 dataMap.tailMap(toS3Key(f)).size(), true, 1,
                 this.getDefaultBlockSize(), System.currentTimeMillis(), f
             );
-            return S3AFileStatus.fromFileStatus(fileStatus, state);
+            return S3AFileStatus.fromFileStatus(fileStatus, state, "etag", "versionId");
         }
         else {
             return new S3AFileStatus(
-                dataMap.get(toS3Key(f)).toByteArray().length,
-                System.currentTimeMillis(),
-                f,
-                this.getDefaultBlockSize(),
-                "owner" // required by the new constructor definition in hadoop 3.2.1
+                    dataMap.get(toS3Key(f)).toByteArray().length,
+                    System.currentTimeMillis(),
+                    f,
+                    this.getDefaultBlockSize(),
+                    "owner",
+                    "etag",
+                    "versionId"
             );
         }
     }
