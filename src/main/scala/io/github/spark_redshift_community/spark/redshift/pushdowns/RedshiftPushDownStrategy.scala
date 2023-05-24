@@ -51,8 +51,8 @@ class RedshiftPushDownStrategy(conf: SparkConf) extends Strategy {
 
   private def buildQuery(plan: LogicalPlan): Option[Seq[RedshiftPushDownPlan]] = {
     QueryBuilder.getRDDFromPlan(plan).map {
-      case (output: Seq[Attribute], rdd: RDD[InternalRow]) =>
-        Seq(RedshiftPushDownPlan(output, rdd))
+      case (output: Seq[Attribute], rdd: RDD[InternalRow], statement: String) =>
+        Seq(RedshiftPushDownPlan(output, rdd, statement))
     }
   }
 }
