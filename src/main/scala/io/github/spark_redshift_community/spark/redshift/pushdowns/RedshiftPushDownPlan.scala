@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StructField, StructType}
 
-case class RedshiftPushDownPlan(output: Seq[Attribute], rdd: RDD[InternalRow], statement: String) extends SparkPlan {
+case class RedshiftPushDownPlan(output: Seq[Attribute], rdd: RDD[InternalRow], sql: String) extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
   protected override def doExecute(): RDD[InternalRow] = {
 

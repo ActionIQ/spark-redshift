@@ -18,6 +18,7 @@ package io.github.spark_redshift_community.spark.redshift
 
 import java.sql.Timestamp
 
+import io.github.spark_redshift_community.spark.redshift.pushdowns.RedshiftPushDownPlan
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -58,7 +59,12 @@ class RedshiftReadSuite extends IntegrationSuiteBase {
   }
 
   test("Pushdown lower") {
-    val cnt = sqlContext.sql("select * from test_table where lower(teststring) = 'asdf'").count()
+    val df = sqlContext.sql("select * from test_table where lower(teststring) = 'asdf'")
+    df.queryExecution.sparkPlan match {
+      case RedshiftPushDownPlan(output, rdd, sql) => assert(sql.contains("LOWER ( SUBQUERY_0.teststring ) = 'asdf'"))
+      case p => assert(false, s"${p} is not a RedshiftPushDownPlan")
+    }
+    val cnt = df.count()
     assert(cnt == 1L)
     // scalastyle:off
     assert(RedshiftPushDownSqlStatement.capturedQueries.forall(_.startsWith("/* partner:partner,testing:true */\nUNLOAD")))
