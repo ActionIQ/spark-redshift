@@ -21,11 +21,10 @@ import java.sql.Connection
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StructType
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
-
 import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
 
 import scala.util.Random
@@ -56,6 +55,7 @@ trait IntegrationSuiteBase
   protected val AWS_REDSHIFT_PASSWORD: String = loadConfigFromEnv("AWS_REDSHIFT_PASSWORD")
   protected val AWS_ACCESS_KEY_ID: String = loadConfigFromEnv("AWS_ACCESS_KEY_ID")
   protected val AWS_SECRET_ACCESS_KEY: String = loadConfigFromEnv("AWS_SECRET_ACCESS_KEY")
+  protected val AWS_IAM_ROLE: String = loadConfigFromEnv("AWS_IAM_ROLE")
   // Path to a directory in S3 (e.g. 's3n://bucket-name/path/to/scratch/space').
   protected val AWS_S3_SCRATCH_SPACE: String = loadConfigFromEnv("AWS_S3_SCRATCH_SPACE")
   require(AWS_S3_SCRATCH_SPACE.contains("s3a"), "must use s3a:// URL")
@@ -69,7 +69,8 @@ trait IntegrationSuiteBase
       Map(
         "url" -> jdbcUrlNoUserPassword,
         "user" -> AWS_REDSHIFT_USER,
-        "password" -> AWS_REDSHIFT_PASSWORD
+        "password" -> AWS_REDSHIFT_PASSWORD,
+        "aws_iam_role" -> AWS_IAM_ROLE
       )
     )
   }
@@ -95,7 +96,11 @@ trait IntegrationSuiteBase
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sc = new SparkContext("local", "RedshiftSourceSuite")
+    sc = new SparkContext(
+      "local",
+      "RedshiftSourceSuite",
+      new SparkConf().set("spark.aiq.sql.enable_jdbc_pushdown", "true")
+    )
     // Bypass Hadoop's FileSystem caching mechanism so that we don't cache the credentials:
     sc.hadoopConfiguration.setBoolean("fs.s3.impl.disable.cache", true)
     sc.hadoopConfiguration.setBoolean("fs.s3n.impl.disable.cache", true)
@@ -146,9 +151,14 @@ trait IntegrationSuiteBase
   protected def read: DataFrameReader = {
     sqlContext.read
       .format("io.github.spark_redshift_community.spark.redshift")
-      .option("url", jdbcUrl)
-      .option("tempdir", tempDir)
-      .option("forward_spark_s3_credentials", "true")
+      .option("url", AWS_REDSHIFT_JDBC_URL)
+      .option("user", AWS_REDSHIFT_USER)
+      .option("password", AWS_REDSHIFT_PASSWORD)
+      .option("aws_iam_role", AWS_IAM_ROLE)
+      .option("tempDir", tempDir)
+      .option("aiq_testing", true)
+      .option("aiq_partner", "partner")
+      .option("ApplicationName", "appName")
   }
   /**
    * Create a new DataFrameWriter using common options for writing to Redshift.

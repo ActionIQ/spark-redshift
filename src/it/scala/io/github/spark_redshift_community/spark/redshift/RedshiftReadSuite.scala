@@ -19,14 +19,15 @@ package io.github.spark_redshift_community.spark.redshift
 import java.sql.Timestamp
 
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.sql.{Row, execution}
+import org.apache.spark.sql.{execution, Row}
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * End-to-end tests of functionality which only impacts the read path (e.g. filter pushdown).
  */
 class RedshiftReadSuite extends IntegrationSuiteBase {
 
-  private val test_table: String = s"read_suite_test_table_$randomSuffix"
+  private val test_table: String = s"read_suite_test_table"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -47,10 +48,22 @@ class RedshiftReadSuite extends IntegrationSuiteBase {
     read.option("dbtable", test_table).load().createOrReplaceTempView("test_table")
   }
 
-  test("DefaultSource can load Redshift UNLOAD output to a DataFrame") {
+  test("DefaultSource can load Redshift UNLOAD output to a DataFrame, prepend aiq comments") {
     checkAnswer(
       sqlContext.sql("select * from test_table"),
       TestUtils.expectedData)
+    // scalastyle:off
+    assert(RedshiftPushDownSqlStatement.capturedQueries.forall(_.startsWith("/* partner:partner,testing:true */\nUNLOAD")))
+    // scalastyle:on
+  }
+
+  test("Pushdown lower") {
+    val cnt = sqlContext.sql("select * from test_table where lower(teststring) = 'asdf'").count()
+    assert(cnt == 1L)
+    // scalastyle:off
+    assert(RedshiftPushDownSqlStatement.capturedQueries.forall(_.startsWith("/* partner:partner,testing:true */\nUNLOAD")))
+    assert(RedshiftPushDownSqlStatement.capturedQueries.exists(_.contains("LOWER ( SUBQUERY_0.teststring ) = \\'asdf\\' )")))
+    // scalastyle:on
   }
 
   test("count() on DataFrame created from a Redshift table") {
