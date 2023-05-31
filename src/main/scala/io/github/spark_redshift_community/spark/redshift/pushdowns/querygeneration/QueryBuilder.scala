@@ -194,7 +194,7 @@ private[redshift] object QueryBuilder {
     val qb = new QueryBuilder(plan)
 
     qb.tryBuild.map { executedBuilder =>
-      (executedBuilder.getOutput, executedBuilder.rdd, executedBuilder.statement.statementString)
+      (executedBuilder.getOutput, executedBuilder.rdd, executedBuilder.statement.toString)
     }
   }
 

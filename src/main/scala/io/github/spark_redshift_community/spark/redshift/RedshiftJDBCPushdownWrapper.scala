@@ -78,7 +78,7 @@ object RedshiftPushDownSqlStatement {
     val aiqPropsString = jdbcProps.collect {
       case (k, v) if k.startsWith("aiq_") =>
         k.replace("aiq_", "") + ":" + v
-    }.mkString(",")
+    }.toSeq.sorted.mkString(",")
 
     val finalQuery = if (aiqPropsString.nonEmpty) {
       s"/* $aiqPropsString */\n$query"

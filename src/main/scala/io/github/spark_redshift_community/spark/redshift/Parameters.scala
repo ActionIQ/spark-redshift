@@ -270,7 +270,8 @@ private[redshift] object Parameters {
      * If true then this library will automatically discover the credentials that Spark is
      * using to connect to S3 and will forward those credentials to Redshift over JDBC.
      */
-    def forwardSparkS3Credentials: Boolean = parameters("forward_spark_s3_credentials").toBoolean
+    def forwardSparkS3Credentials: Boolean =
+      parameters.getOrElse("forward_spark_s3_credentials", "false").toBoolean
 
     /**
      * Temporary AWS credentials which are passed to Redshift. These only need to be supplied by
