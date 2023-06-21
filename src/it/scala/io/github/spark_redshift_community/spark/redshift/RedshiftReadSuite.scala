@@ -72,6 +72,16 @@ class RedshiftReadSuite extends IntegrationSuiteBase {
     // scalastyle:on
   }
 
+  test("Pushdown limit and take") {
+    val df1 = sqlContext.sql("select teststring from test_table")
+    assert(df1.take(1).length === 1L)
+    assert(RedshiftPushDownSqlStatement.capturedQueries.exists(_.contains("LIMIT 1")))
+
+    val df2 = sqlContext.sql("select teststring from test_table limit 5")
+    assert(df2.count() === 5L)
+    assert(RedshiftPushDownSqlStatement.capturedQueries.exists(_.contains("LIMIT 5")))
+  }
+
   test("count() on DataFrame created from a Redshift table") {
     checkAnswer(
       sqlContext.sql("select count(*) from test_table"),

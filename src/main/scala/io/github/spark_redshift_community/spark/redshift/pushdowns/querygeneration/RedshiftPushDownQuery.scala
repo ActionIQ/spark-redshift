@@ -241,12 +241,9 @@ case class SortLimitQueryRedshift(limit: Option[Expression],
         new RedshiftPushDownSqlStatement()
       }
 
-    // TODO need to change limit to top for azure
-
     statementFirstPart + limit
       .map(ConstantString("LIMIT") + expressionToStatement(_))
       .getOrElse(new RedshiftPushDownSqlStatement())
-    statementFirstPart
   }
 }
 
