@@ -17,7 +17,8 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, Attribute, DateAdd, DateSub, Expression, Literal, Month, Quarter, TruncDate, TruncTimestamp, Year}
+import org.apache.spark.sql.catalyst.expressions.{AddMonths, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
+
 import io.github.spark_redshift_community.spark.redshift._
 
 /** Extractor for boolean expressions (return true or false). */
@@ -62,47 +63,7 @@ private[querygeneration] object DateStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
-      case AiqDateToString(ts, fmt, tz) if fmt.foldable =>
-        val unixMsStmt = convertStatement(ts, fields)
-        val fmtStmt = convertStatement(validFmtExpr(fmt), fields)
-        val tzStmt = convertStatement(tz, fields)
-        val utcTsStmt = fromUnixTimeMs(unixMsStmt)
-        val tzTsStmt = convertTimezone(utcTsStmt, tzStmt)
-        formatDatetime(tzTsStmt, fmtStmt)
-
       case _ => null
     })
-  }
-
-  private def validFmtExpr(fmt: Expression): Expression = {
-    // https://docs.aws.amazon.com/redshift/latest/dg/r_FORMAT_strings.html
-    val validFmt = fmt.eval().toString
-      .replaceAll("([^'])T([^'])", "$1\"T\"$2")
-      .replaceAll("HH", "HH24")
-      .replaceAll("mm", "MI")
-      .replaceAll("a", "AM")
-      .replaceAll(".sss|.SSS", ".MS")
-    Literal(validFmt)
-  }
-
-  private def fromUnixTimeMs(
-    unixMsStmt: RedshiftPushDownSqlStatement
-  ): RedshiftPushDownSqlStatement = {
-    // https://stackoverflow.com/a/64656770
-    // TIMESTAMP'epoch' + unixMs * INTERVAL'0.001 SECOND'
-    ConstantString("TIMESTAMP'epoch' +") + unixMsStmt + "* INTERVAL'0.001 SECOND'"
-  }
-
-  private def convertTimezone(
-    tsStmt: RedshiftPushDownSqlStatement, tzStmt: RedshiftPushDownSqlStatement
-  ): RedshiftPushDownSqlStatement = {
-    // https://docs.aws.amazon.com/redshift/latest/dg/CONVERT_TIMEZONE.html
-    ConstantString("CONVERT_TIMEZONE") + blockStatement(mkStatement(Seq(tzStmt, tsStmt)))
-  }
-
-  private def formatDatetime(
-    tsStmt: RedshiftPushDownSqlStatement, fmtStmt: RedshiftPushDownSqlStatement
-  ): RedshiftPushDownSqlStatement = {
-    ConstantString("TO_CHAR") + blockStatement(mkStatement(Seq(tsStmt, fmtStmt)))
   }
 }

@@ -75,7 +75,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
       generateQueries(plan).get
     } catch {
       case e: Exception =>
-        log.warn(s"Not able to generate queries", e)
+        log.warn(s"Not able to generate queries: ${e.getMessage}")
         null
     }
   }
@@ -152,7 +152,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
           }
         }
 
-      case Union(children, byName, allowMissingCol, _, _) =>
+      case Union(children, byName, allowMissingCol) =>
         if (byName || allowMissingCol) {
           throw new IllegalArgumentException("Union by name not supported by Redshift")
         } else { Some(UnionQueryRedshift(children, alias.next)) }

@@ -18,41 +18,28 @@ Our intent is to do the best job possible supporting the minimal set of features
 
 This is currently not tested on EMR. Some tests have been temporarily disabled and some features removed.
 
-## AIQ Dev & Deploy
+## How to help
 
-### Run unit tests
+Community's contributions are very welcome! Feel free to:
 
-```
-sbt test
-```
-
-### Integration tests
-* Export the following environment variables with your values:
-  ```bash
-  export AWS_REDSHIFT_USER=<your AWS_REDSHIFT_USER>
-  export AWS_REDSHIFT_PASSWORD=<your AWS_REDSHIFT_PASSWORD>
-  export AWS_REDSHIFT_JDBC_URL=<your AWS_REDSHIFT_JDBC_URL>
-  export AWS_ACCESS_KEY_ID=<your AWS_ACCESS_KEY_ID>
-  export AWS_SECRET_ACCESS_KEY=<your AWS_SECRET_ACCESS_KEY>
-  export AWS_IAM_ROLE=<your IAM_ROLE_ARN> ie "arn:aws:iam::<account-id>:role/<>"
-  export AWS_S3_SCRATCH_SPACE=<your AWS_S3_SCRATCH_SPACE, i.e "s3a://bucket/path>"
-  ```
-* Run tests:
-  ```bash
-  # all integration tests
-  sbt it:test
-  # test reading only
-  sbt "it:testOnly io.github.spark_redshift_community.spark.redshift.RedshiftReadSuite"
-  # test aiq customizations
-  sbt "it:testOnly io.github.spark_redshift_community.spark.redshift.AiqRedshiftSuite"
-  ```
-* Set log level in `src/it/resources/log4j.properties` to debug integration test failures
-
-### Publish
-Bump version in `version.sbt`, then run
-```bash
-sbt publish
-```
+* Open an issue on github.
+* Open a PR on github. To ensure a smooth code review process, plese follow these steps:
+  * Run unit tests: `sbt test` 
+  * Run integration tests:
+    * Export the following environment variables with your values:
+      ```
+      export AWS_REDSHIFT_USER=<your AWS_REDSHIFT_USER>
+      export AWS_REDSHIFT_PASSWORD=<your AWS_REDSHIFT_PASSWORD>
+      export AWS_REDSHIFT_JDBC_URL=<your AWS_REDSHIFT_JDBC_URL>
+      export AWS_ACCESS_KEY_ID=<your AWS_ACCESS_KEY_ID>
+      export AWS_SECRET_ACCESS_KEY=<your AWS_SECRET_ACCESS_KEY>
+      export AWS_S3_CROSS_REGION_SCRATCH_SPACE=<your AWS_S3_CROSS_REGION_SCRATCH_SPACE>
+      export AWS_IAM_ROLE=<your IAM_ROLE_ARN>
+      export AWS_S3_SCRATCH_SPACE=<your AWS_S3_SCRATCH_SPACE>
+      ```
+    * run `sbt it:test`
+    * run `sbt "it:testOnly io.github.spark_redshift_community.spark.redshift.RedshiftReadSuite"` to test reading only
+   * Get a team member to review your code on github (if possible). This speeds up the PR approval for the admins.
 
 ## About
 

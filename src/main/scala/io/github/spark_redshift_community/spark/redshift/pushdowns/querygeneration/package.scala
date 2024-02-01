@@ -149,7 +149,7 @@ package object querygeneration {
 
   final def mkStatement(
     seq: Seq[RedshiftPushDownSqlStatement],
-    delimiter: String = ","
+    delimiter: String
   ): RedshiftPushDownSqlStatement =
     mkStatement(seq, ConstantString(delimiter) !)
 }
