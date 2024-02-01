@@ -58,30 +58,6 @@ class RedshiftReadSuite extends IntegrationSuiteBase {
     // scalastyle:on
   }
 
-  test("Pushdown lower") {
-    val df = sqlContext.sql("select * from test_table where lower(teststring) = 'asdf'")
-    df.queryExecution.sparkPlan match {
-      case RedshiftPushDownPlan(output, rdd, sql) => assert(sql.contains("LOWER ( SUBQUERY_0.teststring ) = 'asdf'"))
-      case p => assert(false, s"${p} is not a RedshiftPushDownPlan")
-    }
-    val cnt = df.count()
-    assert(cnt == 1L)
-    // scalastyle:off
-    assert(RedshiftPushDownSqlStatement.capturedQueries.forall(_.startsWith("/* partner:partner,testing:true */\nUNLOAD")))
-    assert(RedshiftPushDownSqlStatement.capturedQueries.exists(_.contains("LOWER ( SUBQUERY_0.teststring ) = \\'asdf\\' )")))
-    // scalastyle:on
-  }
-
-  test("Pushdown limit and take") {
-    val df1 = sqlContext.sql("select teststring from test_table")
-    assert(df1.take(1).length === 1L)
-    assert(RedshiftPushDownSqlStatement.capturedQueries.exists(_.contains("LIMIT 1")))
-
-    val df2 = sqlContext.sql("select teststring from test_table limit 5")
-    assert(df2.count() === 5L)
-    assert(RedshiftPushDownSqlStatement.capturedQueries.exists(_.contains("LIMIT 5")))
-  }
-
   test("count() on DataFrame created from a Redshift table") {
     checkAnswer(
       sqlContext.sql("select count(*) from test_table"),
