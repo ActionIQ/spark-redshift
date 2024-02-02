@@ -21,7 +21,7 @@ import sbtrelease.ReleasePlugin.autoImport.ReleaseTransformations._
 import sbtrelease.ReleasePlugin.autoImport._
 import scoverage.ScoverageKeys
 
-val sparkVersion = "3.3.2"
+val sparkVersion = "3-3-2-aiq63"
 
 // Define a custom test configuration so that unit test helper classes can be re-used under
 // the integration tests configuration; see http://stackoverflow.com/a/20635808.
@@ -30,6 +30,8 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion
 val testHadoopVersion = sys.props.get("hadoop.testVersion").getOrElse("3.3.2")
 // DON't UPGRADE AWS-SDK-JAVA if not compatible with hadoop version
 val testAWSJavaSDKVersion = sys.props.get("aws.testVersion").getOrElse("1.12.31")
+
+resolvers += "Artifactory".at("https://actioniq.jfrog.io/artifactory/aiq-sbt-local/")
 
 
 lazy val root = Project("spark-redshift", file("."))
