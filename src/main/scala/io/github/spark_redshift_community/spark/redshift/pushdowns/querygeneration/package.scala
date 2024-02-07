@@ -152,4 +152,10 @@ package object querygeneration {
     delimiter: String = ","
   ): RedshiftPushDownSqlStatement =
     mkStatement(seq, ConstantString(delimiter) !)
+
+  private[querygeneration] final def functionStatement(
+    name: String, args: Seq[RedshiftPushDownSqlStatement]
+  ): RedshiftPushDownSqlStatement = {
+    ConstantString(name) + blockStatement(mkStatement(args))
+  }
 }

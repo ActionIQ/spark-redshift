@@ -67,12 +67,16 @@ private[querygeneration] object DateStatement {
         val fmtStmt = convertStatement(validFmtExpr(fmt), fields)
         val tzStmt = convertStatement(tz, fields)
         val utcTsStmt = fromUnixTimeMs(unixMsStmt)
-        val tzTsStmt = convertTimezone(utcTsStmt, tzStmt)
+        val tzTsStmt = convertTimezone(utcTsStmt, None, tzStmt)
         formatDatetime(tzTsStmt, fmtStmt)
 
       case AiqStringToDate(tsStr, fmt, tz) if fmt.foldable =>
         val fmtStmt = convertStatement(validFmtExpr(fmt), fields)
         val tzStmt = convertStatement(tz, fields)
+        val utcTzStmt = convertStatement(Literal("UTC"), fields)
+        val localTsStmt = strToTimestamp(convertStatement(tsStr, fields), fmtStmt)
+        val utcTsStmt = convertTimezone(localTsStmt, Option(tzStmt), utcTzStmt)
+        toUnixTimeMs(utcTsStmt)
 
       case _ => null
     })
@@ -97,18 +101,44 @@ private[querygeneration] object DateStatement {
     ConstantString("TIMESTAMP'epoch' +") + unixMsStmt + "* INTERVAL'0.001 SECOND'"
   }
 
+  private def toUnixTimeMs(tsStmt: RedshiftPushDownSqlStatement): RedshiftPushDownSqlStatement = {
+    // CAST(EXTRACT('epoch' from ts) AS BIGINT) * 1000 + EXTRACT(ms from ts)
+    castStmt(extractStmt(tsStmt, "'epoch'")) + "* 1000" + "+" + extractStmt(tsStmt, "ms")
+  }
+
   private def convertTimezone(
     tsStmt: RedshiftPushDownSqlStatement,
-    fromTz: RedshiftPushDownSqlStatement,
+    fromTz: Option[RedshiftPushDownSqlStatement],
     toTz: RedshiftPushDownSqlStatement
   ): RedshiftPushDownSqlStatement = {
     // https://docs.aws.amazon.com/redshift/latest/dg/CONVERT_TIMEZONE.html
-    ConstantString("CONVERT_TIMEZONE") + blockStatement(mkStatement(Seq(tzStmt, tsStmt)))
+    functionStatement(
+      "CONVERT_TIMEZONE",
+      fromTz.fold(Seq(toTz, tsStmt))(Seq(_, toTz, tsStmt))
+    )
   }
 
   private def formatDatetime(
     tsStmt: RedshiftPushDownSqlStatement, fmtStmt: RedshiftPushDownSqlStatement
   ): RedshiftPushDownSqlStatement = {
     ConstantString("TO_CHAR") + blockStatement(mkStatement(Seq(tsStmt, fmtStmt)))
+  }
+
+  private def strToTimestamp(
+    tsStrStmt: RedshiftPushDownSqlStatement, fmtStmt: RedshiftPushDownSqlStatement
+  ): RedshiftPushDownSqlStatement = {
+    castStmt(functionStatement("TO_TIMESTAMP", Seq(tsStrStmt, fmtStmt)), "TIMESTAMP")
+  }
+
+  private def castStmt(
+    stmt: RedshiftPushDownSqlStatement, asType: String = "BIGINT"
+  ): RedshiftPushDownSqlStatement = {
+    functionStatement("CAST", Seq(stmt + "AS" + asType))
+  }
+
+  private def extractStmt(
+    stmt: RedshiftPushDownSqlStatement, dtPart: String
+  ): RedshiftPushDownSqlStatement = {
+    functionStatement("EXTRACT", Seq(ConstantString(dtPart) + "FROM" + stmt))
   }
 }
