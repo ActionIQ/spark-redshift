@@ -17,7 +17,7 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, Attribute, DateAdd, DateSub, Expression, Literal, Month, Quarter, TruncDate, TruncTimestamp, Year}
+import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, AiqStringToDate, Attribute, DateAdd, DateSub, Expression, Literal, Month, Quarter, TruncDate, TruncTimestamp, Year}
 import io.github.spark_redshift_community.spark.redshift._
 
 /** Extractor for boolean expressions (return true or false). */
@@ -70,6 +70,10 @@ private[querygeneration] object DateStatement {
         val tzTsStmt = convertTimezone(utcTsStmt, tzStmt)
         formatDatetime(tzTsStmt, fmtStmt)
 
+      case AiqStringToDate(tsStr, fmt, tz) if fmt.foldable =>
+        val fmtStmt = convertStatement(validFmtExpr(fmt), fields)
+        val tzStmt = convertStatement(tz, fields)
+
       case _ => null
     })
   }
@@ -94,7 +98,9 @@ private[querygeneration] object DateStatement {
   }
 
   private def convertTimezone(
-    tsStmt: RedshiftPushDownSqlStatement, tzStmt: RedshiftPushDownSqlStatement
+    tsStmt: RedshiftPushDownSqlStatement,
+    fromTz: RedshiftPushDownSqlStatement,
+    toTz: RedshiftPushDownSqlStatement
   ): RedshiftPushDownSqlStatement = {
     // https://docs.aws.amazon.com/redshift/latest/dg/CONVERT_TIMEZONE.html
     ConstantString("CONVERT_TIMEZONE") + blockStatement(mkStatement(Seq(tzStmt, tsStmt)))
