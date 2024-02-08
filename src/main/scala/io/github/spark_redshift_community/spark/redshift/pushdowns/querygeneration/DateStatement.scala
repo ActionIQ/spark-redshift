@@ -20,7 +20,7 @@ package io.github.spark_redshift_community.spark.redshift.pushdowns.querygenerat
 import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, AiqStringToDate, Attribute, DateAdd, DateSub, Expression, Literal, Month, Quarter, TruncDate, TruncTimestamp, Year}
 import io.github.spark_redshift_community.spark.redshift._
 
-/** Extractor for boolean expressions (return true or false). */
+/** Extractor for datetime expressions */
 private[querygeneration] object DateStatement {
   // DateAdd's pretty name in Spark is "date_add",
   // the counterpart's name in SF is "DATEADD".
@@ -72,8 +72,9 @@ private[querygeneration] object DateStatement {
 
       case AiqStringToDate(tsStr, fmt, tz) if fmt.foldable =>
         val fmtStmt = convertStatement(validFmtExpr(fmt), fields)
-        val tzStmt = convertStatement(tz, fields)
         val utcTzStmt = convertStatement(Literal("UTC"), fields)
+        val tzStmt = convertStatement(tz, fields)
+
         val localTsStmt = strToTimestamp(convertStatement(tsStr, fields), fmtStmt)
         val utcTsStmt = convertTimezone(localTsStmt, Option(tzStmt), utcTzStmt)
         toUnixTimeMs(utcTsStmt)

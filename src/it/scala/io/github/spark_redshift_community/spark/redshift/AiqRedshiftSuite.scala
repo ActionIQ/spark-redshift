@@ -4,6 +4,7 @@ import io.github.spark_redshift_community.spark.redshift.pushdowns.RedshiftPushD
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.DataFrame
 
+// scalastyle:off line.size.limit
 class AiqRedshiftSuite extends IntegrationSuiteBase {
   private val testTable: String = "aiq_read_test_table"
 
@@ -14,7 +15,8 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
          |teststring varchar(256),
          |ts_ms int8,
          |timezone varchar(50),
-         |fmt varchar(100)
+         |fmt varchar(100),
+         |ts_str varchar(100)
          |)
       """.stripMargin
     )
@@ -22,10 +24,10 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     conn.createStatement().executeUpdate(
       s"""
          |insert into $tableName values
-         |('ASDF', 1706565058123, 'EST', 'yyyy/MM/ddThh:mm:ss'),
-         |('blah', 1706565058001, 'Asia/Shanghai', 'yyyy-MM-dd hh:mm:ss.SSS'),
-         |(null, 1718841600000, 'America/New_York', 'yyyy-MM-dd HH'),
-         |('x', 1718841600000, 'UTC', 'yyyy-MM-dd')
+         |('ASDF', 1706565058123, 'EST', 'yyyy/MM/ddThh:mm:ss', '2024-01-29T16:50:58.123'),
+         |('blah', 1706565058001, 'Asia/Shanghai', 'yyyy-MM-dd hh:mm:ss.SSS', '2024-01-30T05:50:58.001'),
+         |(null, 1718841600000, 'America/New_York', 'yyyy-MM-dd HH', '2024-06-19T20:00:00.000'),
+         |('x', 1718841600000, 'UTC', 'yyyy-MM-dd', '2024-06-20T00:00:00.000')
          |""".stripMargin
     )
   }
@@ -46,11 +48,6 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     } finally {
       super.afterAll()
     }
-  }
-
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    read.option("dbtable", testTable).load().createOrReplaceTempView("test_table")
   }
 
   private def checkPlan(plan: SparkPlan)(check: String => Boolean): Unit = {
@@ -125,6 +122,31 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     checkOneCol(
       df3, Seq("2024/01/29T04:50:58", "2024-01-30 05:50:58.001", "2024-06-19 20", "2024-06-20")
     )
+  }
+
+  test("aiq_string_to_date pushdown") {
+    val table = read.option("dbtable", testTable).load()
+    val df1 = table.selectExpr(
+      "aiq_string_to_date(ts_str, 'yyyy-MM-ddTHH:mm:ss.SSS', 'America/New_York')"
+    )
+    checkOneCol(
+      df1, Seq(1706565058123L, 1706611858001L, 1718841600000L, 1718856000000L)
+    )
+    checkPlan(df1.queryExecution.executedPlan) { sql =>
+      sql.contains("EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , CAST ( TO_TIMESTAMP") &&
+        sql.contains("+ EXTRACT ( ms FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , CAST ( TO_TIMESTAMP") &&
+        sql.contains("yyyy-MM-dd\"T\"HH24:MI:ss.MS'")
+    }
+    val df2 = table.selectExpr(
+      "aiq_string_to_date(ts_str, 'yyyy-MM-ddTHH:mm:ss.SSS', timezone)"
+    )
+    checkOneCol(
+      df2, Seq(1706565058123L, 1706565058001L, 1718841600000L, 1718841600000L)
+    )
+    checkPlan(df2.queryExecution.executedPlan) { sql =>
+      sql.contains("EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( SUBQUERY_0.timezone , 'UTC' , CAST ( TO_TIMESTAMP ( SUBQUERY_0.ts_str") &&
+        sql.contains("+ EXTRACT ( ms FROM CONVERT_TIMEZONE ( SUBQUERY_0.timezone , 'UTC' , CAST ( TO_TIMESTAMP")
+    }
   }
 
 
