@@ -133,6 +133,38 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
       df1, Seq(1706565058123L, 1706611858001L, 1718841600000L, 1718856000000L)
     )
     checkPlan(df1.queryExecution.executedPlan) { sql =>
+      /*
+      SELECT
+        (
+          CAST (
+            EXTRACT (
+              'epoch'
+              FROM
+                CONVERT_TIMEZONE (
+                  'America/New_York',
+                  'UTC',
+                  CAST (
+                    TO_TIMESTAMP (
+                      SUBQUERY_0.ts_str, 'yyyy-MM-dd"T"HH24:MI:ss.MS'
+                    ) AS TIMESTAMP
+                  )
+                )
+            ) AS BIGINT
+          ) * 1000 + EXTRACT (
+            ms
+            FROM
+              CONVERT_TIMEZONE (
+                'America/New_York',
+                'UTC',
+                CAST (
+                  TO_TIMESTAMP (
+                    SUBQUERY_0.ts_str, 'yyyy-MM-dd"T"HH24:MI:ss.MS'
+                  ) AS TIMESTAMP
+                )
+              )
+          )
+        )
+      */
       sql.contains("EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , CAST ( TO_TIMESTAMP") &&
         sql.contains("+ EXTRACT ( ms FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , CAST ( TO_TIMESTAMP") &&
         sql.contains("yyyy-MM-dd\"T\"HH24:MI:ss.MS'")
