@@ -161,7 +161,8 @@ private[querygeneration] object MiscStatement {
       case TimestampType => "TIMESTAMP"
       case d: DecimalType =>
         "DECIMAL(" + d.precision + ", " + d.scale + ")"
-      case IntegerType | LongType => "NUMERIC"
+      case IntegerType => "INT"
+      case LongType => "BIGINT"
       case FloatType | DoubleType => "FLOAT"
       case _ => null
     })

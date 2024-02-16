@@ -18,10 +18,8 @@ package io.github.spark_redshift_community.spark.redshift
 
 import java.sql.Timestamp
 
-import io.github.spark_redshift_community.spark.redshift.pushdowns.RedshiftPushDownPlan
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.{execution, Row}
-import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * End-to-end tests of functionality which only impacts the read path (e.g. filter pushdown).

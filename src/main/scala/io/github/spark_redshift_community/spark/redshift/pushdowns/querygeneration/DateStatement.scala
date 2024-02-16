@@ -17,10 +17,11 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, Attribute, DateAdd, DateSub, Expression, Literal, Month, Quarter, TruncDate, TruncTimestamp, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqStringToDate, Attribute, Cast, ConvertTimezone, DateAdd, DateSub, Divide, Expression, Extract, FromUnixTime, Literal, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, TruncDate, TruncTimestamp, UnixMillis, Year}
 import io.github.spark_redshift_community.spark.redshift._
+import org.apache.spark.sql.types.{DoubleType, LongType, NullType, StringType, TimestampType}
 
-/** Extractor for boolean expressions (return true or false). */
+/** Extractor for datetime expressions */
 private[querygeneration] object DateStatement {
   // DateAdd's pretty name in Spark is "date_add",
   // the counterpart's name in SF is "DATEADD".
@@ -62,13 +63,87 @@ private[querygeneration] object DateStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
+      case ParseToTimestamp(left, Some(fmt), _, None) if fmt.foldable =>
+        val fmtExpr = validFmtExpr(fmt)
+        functionStatement("TO_TIMESTAMP", Seq(left, fmtExpr).map(convertStatement(_, fields)))
+
+      case ConvertTimezone(sourceTz, targetTz, sourceTs) =>
+        functionStatement(
+          "CONVERT_TIMEZONE", Seq(sourceTz, targetTz, sourceTs).map(convertStatement(_, fields))
+        )
+        
+      case Extract(field, source, _) if field.foldable =>
+        val fieldStr = field.eval().toString
+        val sourceStmt = convertStatement(source, fields)
+        functionStatement(
+          "EXTRACT",
+          Seq(ConstantString(fieldStr) + "FROM" + sourceStmt)
+        )
+
+      case MakeInterval(years, months, weeks, days, hours, mins, secs, _) =>
+        def helper(expr: Expression, dtPart: String): Option[RedshiftPushDownSqlStatement] = {
+          val stmt = if (expr.foldable) {
+            // handles null
+            Option(expr.eval()).map { v => ConstantString(v.toString).toStatement }
+          } else { Option(convertStatement(expr, fields)) }
+
+          // e.g. SELECT 2 * INTERVAL '1 SECOND'
+          stmt.map(s => s + "*" + s"INTERVAL '1 $dtPart'")
+        }
+        val totalDays = Add(Multiply(weeks, Literal(7)), days)
+        val stmtParts = Seq(
+          helper(years, "YEAR"),
+          helper(months, "MONTH"),
+          helper(totalDays, "DAY"),
+          helper(hours, "HOUR"),
+          helper(mins, "MINUTE"),
+          helper(secs, "SECOND")
+        ).collect { case Some(stmt) => stmt }
+        blockStatement(mkStatement(stmtParts, "+"))
+
+      case FromUnixTime(sec, _, _) =>
+        val intervalExpr = MakeInterval(
+          years = Literal.default(NullType),
+          months = Literal.default(NullType),
+          weeks = Literal.default(NullType),
+          days = Literal.default(NullType),
+          hours = Literal.default(NullType),
+          mins = Literal.default(NullType),
+          secs = sec
+        )
+        ConstantString("TIMESTAMP'epoch' +") + convertStatement(intervalExpr, fields)
+
+      case UnixMillis(child) =>
+        // CAST ( EXTRACT ('epoch' from ts) AS BIGINT) * 1000 +
+        // CAST ( EXTRACT (ms from ts) AS BIGINT)
+        val secsExpr = Multiply(
+          Cast(Extract(Literal("'epoch'"), child, Literal.default(LongType)), LongType),
+          Literal(1000L)
+        )
+        val msExpr = Cast(Extract(Literal("ms"), child, Literal.default(LongType)), LongType)
+        convertStatement(Add(secsExpr, msExpr), fields)
+
       case AiqDateToString(ts, fmt, tz) if fmt.foldable =>
-        val unixMsStmt = convertStatement(ts, fields)
         val fmtStmt = convertStatement(validFmtExpr(fmt), fields)
-        val tzStmt = convertStatement(tz, fields)
-        val utcTsStmt = fromUnixTimeMs(unixMsStmt)
-        val tzTsStmt = convertTimezone(utcTsStmt, tzStmt)
-        formatDatetime(tzTsStmt, fmtStmt)
+        val localTsExpr = ConvertTimezone(
+          Literal("UTC"),
+          tz,
+          FromUnixTime(Divide(Cast(ts, DoubleType), Literal(1000L)), fmt)
+        )
+        formatDatetime(
+          convertStatement(localTsExpr, fields),
+          fmtStmt,
+        )
+
+      case AiqStringToDate(tsStr, fmt, tz) if fmt.foldable =>
+        val localTsExpr = Cast(
+          ParseToTimestamp(tsStr, Option(fmt), StringType),
+          TimestampType
+        )
+        val msExpr = UnixMillis(
+          ConvertTimezone(tz, Literal("UTC"), localTsExpr)
+        )
+        convertStatement(msExpr, fields)
 
       case _ => null
     })
@@ -83,21 +158,6 @@ private[querygeneration] object DateStatement {
       .replaceAll("a", "AM")
       .replaceAll(".sss|.SSS", ".MS")
     Literal(validFmt)
-  }
-
-  private def fromUnixTimeMs(
-    unixMsStmt: RedshiftPushDownSqlStatement
-  ): RedshiftPushDownSqlStatement = {
-    // https://stackoverflow.com/a/64656770
-    // TIMESTAMP'epoch' + unixMs * INTERVAL'0.001 SECOND'
-    ConstantString("TIMESTAMP'epoch' +") + unixMsStmt + "* INTERVAL'0.001 SECOND'"
-  }
-
-  private def convertTimezone(
-    tsStmt: RedshiftPushDownSqlStatement, tzStmt: RedshiftPushDownSqlStatement
-  ): RedshiftPushDownSqlStatement = {
-    // https://docs.aws.amazon.com/redshift/latest/dg/CONVERT_TIMEZONE.html
-    ConstantString("CONVERT_TIMEZONE") + blockStatement(mkStatement(Seq(tzStmt, tsStmt)))
   }
 
   private def formatDatetime(

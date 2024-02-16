@@ -41,7 +41,7 @@ class RedshiftPushDownStrategy(conf: SparkConf) extends Strategy {
         })).getOrElse(Nil)
       } catch {
         case e: Exception =>
-          log.warn(s"Pushdown failed: ${e.getMessage}")
+          log.warn(s"Pushdown failed", e)
           Nil
       }
     } else {
