@@ -71,6 +71,7 @@ private[querygeneration] object DateStatement {
         functionStatement(
           "CONVERT_TIMEZONE", Seq(sourceTz, targetTz, sourceTs).map(convertStatement(_, fields))
         )
+        
       case Extract(field, source, _) if field.foldable =>
         val fieldStr = field.eval().toString
         val sourceStmt = convertStatement(source, fields)
@@ -111,7 +112,6 @@ private[querygeneration] object DateStatement {
           secs = sec
         )
         ConstantString("TIMESTAMP'epoch' +") + convertStatement(intervalExpr, fields)
-
 
       case UnixMillis(child) =>
         // CAST ( EXTRACT ('epoch' from ts) AS BIGINT) * 1000 +
