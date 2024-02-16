@@ -99,7 +99,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
   }
 
   private def generateQueries(plan: LogicalPlan): Option[RedshiftPushDownQuery] = {
-    plan match {
+    val query = plan match {
       case l@LogicalRelation(redshiftRelation: RedshiftRelation, _, _, _) =>
         Some(SourceQueryRedshift(redshiftRelation, l.output, alias.next))
 
@@ -170,6 +170,8 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
         // QueryBuilder.
         None
     }
+    log.debug(s"Generated pushdown query $query from logical plan:\n$plan")
+    query
   }
 
 }

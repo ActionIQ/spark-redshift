@@ -101,11 +101,12 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
       /*
       TO_CHAR (
         CONVERT_TIMEZONE (
+         'UTC' ,
          'America/New_York' ,
-         TIMESTAMP'epoch' + SUBQUERY_0.ts_ms * INTERVAL'0.001 SECOND') ,
-         'yyyy/MM/dd"T"HH24:MI:ss.MS' )
+         TIMESTAMP'epoch' + ( ( CAST ( SUBQUERY_0.ts_ms AS FLOAT ) / 1000 ) * INTERVAL '1 SECOND' ) ) ,
+       'yyyy/MM/dd"T"HH24:MI:ss.MS' )
        */
-      sql.contains("TO_CHAR ( CONVERT_TIMEZONE ( 'America/New_York'") &&
+      sql.contains("TO_CHAR ( CONVERT_TIMEZONE ( 'UTC' , 'America/New_York'") &&
         sql.contains("'yyyy/MM/dd\"T\"HH24:MI:ss.MS'")
     }
 
@@ -134,39 +135,38 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     )
     checkPlan(df1.queryExecution.executedPlan) { sql =>
       /*
-      SELECT
-        (
-          CAST (
-            EXTRACT (
-              'epoch'
-              FROM
-                CONVERT_TIMEZONE (
-                  'America/New_York',
-                  'UTC',
-                  CAST (
-                    TO_TIMESTAMP (
-                      SUBQUERY_0.ts_str, 'yyyy-MM-dd"T"HH24:MI:ss.MS'
-                    ) AS TIMESTAMP
-                  )
-                )
-            ) AS BIGINT
-          ) * 1000 + EXTRACT (
-            ms
-            FROM
-              CONVERT_TIMEZONE (
-                'America/New_York',
-                'UTC',
-                CAST (
-                  TO_TIMESTAMP (
-                    SUBQUERY_0.ts_str, 'yyyy-MM-dd"T"HH24:MI:ss.MS'
-                  ) AS TIMESTAMP
-                )
+      CAST (
+        EXTRACT (
+          'epoch'
+          FROM
+            CONVERT_TIMEZONE (
+              'America/New_York',
+              'UTC',
+              CAST (
+                TO_TIMESTAMP (
+                  SUBQUERY_0.ts_str, 'yyyy-MM-dd"T"HH24:MI:ss.MS'
+                ) AS TIMESTAMP
               )
-          )
-        )
+            )
+        ) AS BIGINT
+      ) * 1000
+      ) + CAST (
+        EXTRACT (
+          ms
+          FROM
+            CONVERT_TIMEZONE (
+              'America/New_York',
+              'UTC',
+              CAST (
+                TO_TIMESTAMP (
+                  SUBQUERY_0.ts_str, 'yyyy-MM-dd"T"HH24:MI:ss.MS'
+                ) AS TIMESTAMP
+              )
+            )
+        ) AS BIGINT
       */
-      sql.contains("EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , CAST ( TO_TIMESTAMP") &&
-        sql.contains("+ EXTRACT ( ms FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , CAST ( TO_TIMESTAMP") &&
+      sql.contains("CAST ( EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , CAST ( TO_TIMESTAMP") &&
+        sql.contains("+ CAST ( EXTRACT ( ms FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , CAST ( TO_TIMESTAMP") &&
         sql.contains("yyyy-MM-dd\"T\"HH24:MI:ss.MS'")
     }
     val df2 = table.selectExpr(
@@ -176,10 +176,8 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
       df2, Seq(1706565058123L, 1706565058001L, 1718841600000L, 1718841600000L)
     )
     checkPlan(df2.queryExecution.executedPlan) { sql =>
-      sql.contains("EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( SUBQUERY_0.timezone , 'UTC' , CAST ( TO_TIMESTAMP ( SUBQUERY_0.ts_str") &&
-        sql.contains("+ EXTRACT ( ms FROM CONVERT_TIMEZONE ( SUBQUERY_0.timezone , 'UTC' , CAST ( TO_TIMESTAMP")
+      sql.contains("CAST ( EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( SUBQUERY_0.timezone , 'UTC' , CAST ( TO_TIMESTAMP ( SUBQUERY_0.ts_str") &&
+        sql.contains("+ CAST ( EXTRACT ( ms FROM CONVERT_TIMEZONE ( SUBQUERY_0.timezone , 'UTC' , CAST ( TO_TIMESTAMP")
     }
   }
-
-
 }
