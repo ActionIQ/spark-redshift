@@ -17,7 +17,7 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqStringToDate, Attribute, Cast, ConvertTimezone, DateAdd, DateSub, Divide, Expression, Extract, FromUnixTime, Literal, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, TruncDate, TruncTimestamp, UnixMillis, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqStringToDate, Attribute, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, FromUnixTime, Literal, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, TruncDate, TruncTimestamp, UnixMillis, Year}
 import io.github.spark_redshift_community.spark.redshift._
 import org.apache.spark.sql.types.{DoubleType, LongType, NullType, StringType, TimestampType}
 
@@ -124,15 +124,22 @@ private[querygeneration] object DateStatement {
         convertStatement(Add(secsExpr, msExpr), fields)
 
       case AiqDateToString(ts, fmt, tz) if fmt.foldable =>
-        val fmtStmt = convertStatement(validFmtExpr(fmt), fields)
-        val localTsExpr = ConvertTimezone(
-          Literal("UTC"),
-          tz,
-          FromUnixTime(Divide(Cast(ts, DoubleType), Literal(1000L)), fmt)
+        convertStatement(
+          DateFormatClass(
+            ConvertTimezone(
+              Literal("UTC"), tz, FromUnixTime(Divide(Cast(ts, DoubleType), Literal(1000.0)), fmt)
+            ),
+            validFmtExpr(fmt)
+          ),
+          fields
         )
-        formatDatetime(
-          convertStatement(localTsExpr, fields),
-          fmtStmt,
+
+      case DateDiff(endDate, startDate) =>
+        // https://docs.aws.amazon.com/redshift/latest/dg/r_DATEDIFF_function.html
+        functionStatement(
+          "DATEDIFF",
+          ConstantString("days").toStatement
+            +: Seq(startDate, endDate).map(convertStatement(_, fields))
         )
 
       case AiqStringToDate(tsStr, fmt, tz) if fmt.foldable =>
@@ -144,6 +151,25 @@ private[querygeneration] object DateStatement {
           ConvertTimezone(tz, Literal("UTC"), localTsExpr)
         )
         convertStatement(msExpr, fields)
+
+      case DateFormatClass(timestamp, fmt, None) =>
+        functionStatement(
+          "TO_CHAR",
+          Seq(timestamp, fmt).map(convertStatement(_, fields))
+        )
+
+      case AiqDayDiff(startTs, endTs, timezoneId) =>
+        val Seq(startDt, endDt) = Seq(startTs, endTs).map { ts =>
+          ConvertTimezone(
+            Literal("UTC"),
+            timezoneId,
+            FromUnixTime(
+              Divide(Cast(ts, DoubleType), Literal(1000.0)),
+              Literal.default(NullType)
+            )
+          )
+        }
+        convertStatement(DateDiff(endDt, startDt), fields)
 
       case _ => null
     })
@@ -158,11 +184,5 @@ private[querygeneration] object DateStatement {
       .replaceAll("a", "AM")
       .replaceAll(".sss|.SSS", ".MS")
     Literal(validFmt)
-  }
-
-  private def formatDatetime(
-    tsStmt: RedshiftPushDownSqlStatement, fmtStmt: RedshiftPushDownSqlStatement
-  ): RedshiftPushDownSqlStatement = {
-    ConstantString("TO_CHAR") + blockStatement(mkStatement(Seq(tsStmt, fmtStmt)))
   }
 }
