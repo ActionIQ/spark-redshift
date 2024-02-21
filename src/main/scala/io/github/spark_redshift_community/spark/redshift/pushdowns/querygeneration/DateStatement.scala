@@ -101,7 +101,7 @@ private[querygeneration] object DateStatement {
         ).collect { case Some(stmt) => stmt }
         blockStatement(mkStatement(stmtParts, "+"))
 
-      case FromUnixTime(sec, _, _) =>
+      case FromUnixTime(sec, _, None) =>
         val intervalExpr = MakeInterval(
           years = Literal.default(NullType),
           months = Literal.default(NullType),

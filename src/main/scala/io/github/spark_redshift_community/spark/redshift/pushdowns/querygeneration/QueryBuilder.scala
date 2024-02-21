@@ -72,7 +72,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
   }
   private[redshift] lazy val treeRoot: RedshiftPushDownQuery = {
     try {
-      generateQueries(plan).get
+      generateQueries(plan).orNull
     } catch {
       case e: Exception =>
         log.warn(s"Not able to generate queries", e)
