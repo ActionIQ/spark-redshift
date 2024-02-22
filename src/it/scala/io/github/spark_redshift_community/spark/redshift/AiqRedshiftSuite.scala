@@ -14,6 +14,7 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
          |create table $tableName (
          |teststring varchar(256),
          |ts_ms int8,
+         |ts_ms_2 int8,
          |timezone varchar(50),
          |fmt varchar(100),
          |ts_str varchar(100)
@@ -24,10 +25,10 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     conn.createStatement().executeUpdate(
       s"""
          |insert into $tableName values
-         |('ASDF', 1706565058123, 'EST', 'yyyy/MM/ddThh:mm:ss', '2024-01-29T16:50:58.123'),
-         |('blah', 1706565058001, 'Asia/Shanghai', 'yyyy-MM-dd hh:mm:ss.SSS', '2024-01-30T05:50:58.001'),
-         |(null, 1718841600000, 'America/New_York', 'yyyy-MM-dd HH', '2024-06-19T20:00:00.000'),
-         |('x', 1718841600000, 'UTC', 'yyyy-MM-dd', '2024-06-20T00:00:00.000')
+         |('ASDF', 1706565058123, 1706590812001, 'EST', 'yyyy/MM/ddThh:mm:ss', '2024-01-29T16:50:58.123'),
+         |('blah', 1706565058001, 1706478758001, 'Asia/Shanghai', 'yyyy-MM-dd hh:mm:ss.SSS', '2024-01-30T05:50:58.001'),
+         |(null, 1718841600000, 1704085146456, 'America/New_York', 'yyyy-MM-dd HH', '2024-06-19T20:00:00.000'),
+         |('x', 1718841600000, 1704085146456, 'UTC', 'yyyy-MM-dd', '2024-06-20T00:00:00.000')
          |""".stripMargin
     )
   }
@@ -179,5 +180,43 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
       sql.contains("CAST ( EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( SUBQUERY_0.timezone , 'UTC' , CAST ( TO_TIMESTAMP ( SUBQUERY_0.ts_str") &&
         sql.contains("+ CAST ( EXTRACT ( ms FROM CONVERT_TIMEZONE ( SUBQUERY_0.timezone , 'UTC' , CAST ( TO_TIMESTAMP")
     }
+  }
+
+  test("aiq_day_diff pushdown") {
+    val table = read.option("dbtable", testTable).load()
+    val df1 = table.selectExpr("aiq_day_diff(ts_ms, ts_ms_2, timezone)")
+    checkOneCol(df1, Seq(1, -1, -171, -171))
+    /*
+    DATEDIFF (
+      days,
+      CONVERT_TIMEZONE (
+        'UTC',
+        SUBQUERY_0.timezone,
+        TIMESTAMP 'epoch' + (
+          (
+            CAST (SUBQUERY_0.ts_ms AS FLOAT) / 1000.0
+          ) * INTERVAL '1 SECOND'
+        )
+      ),
+      CONVERT_TIMEZONE (
+        'UTC',
+        SUBQUERY_0.timezone,
+        TIMESTAMP 'epoch' + (
+          (
+            CAST (SUBQUERY_0.ts_ms_2 AS FLOAT) / 1000.0
+          ) * INTERVAL '1 SECOND'
+        )
+      )
+    )
+     */
+    checkPlan(df1.queryExecution.executedPlan) { sql =>
+      sql.contains("DATEDIFF ( days , CONVERT_TIMEZONE ( 'UTC' , SUBQUERY_0.timezone")
+    }
+    val df2 = table.selectExpr("aiq_day_diff(1704085146456, ts_ms, 'America/New_York')")
+    checkOneCol(df2, Seq(29, 29, 171, 171))
+    checkPlan(df2.queryExecution.executedPlan) { sql =>
+      sql.contains("DATEDIFF ( days , CONVERT_TIMEZONE ( 'UTC' , 'America/New_York'")
+    }
+
   }
 }
