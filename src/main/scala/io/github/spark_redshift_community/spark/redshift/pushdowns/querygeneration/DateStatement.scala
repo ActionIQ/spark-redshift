@@ -17,9 +17,11 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqStringToDate, Attribute, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, FromUnixTime, Literal, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, TruncDate, TruncTimestamp, UnixMillis, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, EqualTo, Expression, Extract, Floor, FromUnixTime, Literal, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
 import io.github.spark_redshift_community.spark.redshift._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DoubleType, LongType, NullType, StringType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /** Extractor for datetime expressions */
 private[querygeneration] object DateStatement {
@@ -170,6 +172,45 @@ private[querygeneration] object DateStatement {
           )
         }
         convertStatement(DateDiff(endDt, startDt), fields)
+
+      case AiqWeekDiff(startTs, endTs, startDay, timezoneId) =>
+        val startDayNumber = {
+          if (startDay.foldable) {
+            Literal(
+              DateTimeUtils.getAiqDayOfWeekFromString(startDay.eval().asInstanceOf[UTF8String])
+            )
+          } else {
+            // org.apache.spark.sql.catalyst.util.DateTimeUtils.getAiqDayOfWeekFromString
+            CaseWhen(Seq(
+              (EqualTo(Upper(startDay), Literal("SU")), Literal(4)),
+              (EqualTo(Upper(startDay), Literal("SUN")), Literal(4)),
+              (EqualTo(Upper(startDay), Literal("SUNDAY")), Literal(4)),
+              (EqualTo(Upper(startDay), Literal("MO")), Literal(3)),
+              (EqualTo(Upper(startDay), Literal("MON")), Literal(3)),
+              (EqualTo(Upper(startDay), Literal("MONDAY")), Literal(3)),
+              (EqualTo(Upper(startDay), Literal("TU")), Literal(2)),
+              (EqualTo(Upper(startDay), Literal("TUE")), Literal(2)),
+              (EqualTo(Upper(startDay), Literal("TUESDAY")), Literal(2)),
+              (EqualTo(Upper(startDay), Literal("WE")), Literal(1)),
+              (EqualTo(Upper(startDay), Literal("WED")), Literal(1)),
+              (EqualTo(Upper(startDay), Literal("WEDNESDAY")), Literal(1)),
+              (EqualTo(Upper(startDay), Literal("TH")), Literal(0)),
+              (EqualTo(Upper(startDay), Literal("THU")), Literal(0)),
+              (EqualTo(Upper(startDay), Literal("THURSDAY")), Literal(0)),
+              (EqualTo(Upper(startDay), Literal("FR")), Literal(6)),
+              (EqualTo(Upper(startDay), Literal("FRI")), Literal(6)),
+              (EqualTo(Upper(startDay), Literal("FRIDAY")), Literal(6)),
+              (EqualTo(Upper(startDay), Literal("SA")), Literal(5)),
+              (EqualTo(Upper(startDay), Literal("SAT")), Literal(5)),
+              (EqualTo(Upper(startDay), Literal("SATURDAY")), Literal(5))
+            ))
+          }
+        }
+        val Seq(startWeeksSinceEpoch, endWeeksSinceEpoch) = Seq(startTs, endTs).map { ms =>
+          val daysSinceEpoch = AiqDayDiff(Literal(0), ms, timezoneId)
+          Floor(Divide(Add(daysSinceEpoch, startDayNumber), Literal(7)))
+        }
+        convertStatement(Subtract(endWeeksSinceEpoch, startWeeksSinceEpoch), fields)
 
       case _ => null
     })
