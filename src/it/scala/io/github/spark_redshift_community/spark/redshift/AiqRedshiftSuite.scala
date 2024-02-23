@@ -17,7 +17,8 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
          |ts_ms_2 int8,
          |timezone varchar(50),
          |fmt varchar(100),
-         |ts_str varchar(100)
+         |ts_str varchar(100),
+         |day_of_week varchar(100)
          |)
       """.stripMargin
     )
@@ -25,10 +26,10 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     conn.createStatement().executeUpdate(
       s"""
          |insert into $tableName values
-         |('ASDF', 1706565058123, 1706590812001, 'EST', 'yyyy/MM/ddThh:mm:ss', '2024-01-29T16:50:58.123'),
-         |('blah', 1706565058001, 1706478758001, 'Asia/Shanghai', 'yyyy-MM-dd hh:mm:ss.SSS', '2024-01-30T05:50:58.001'),
-         |(null, 1718841600000, 1704085146456, 'America/New_York', 'yyyy-MM-dd HH', '2024-06-19T20:00:00.000'),
-         |('x', 1718841600000, 1704085146456, 'UTC', 'yyyy-MM-dd', '2024-06-20T00:00:00.000')
+         |('ASDF', 1706565058123, 1706590812001, 'EST', 'yyyy/MM/ddThh:mm:ss', '2024-01-29T16:50:58.123', 'Mon'),
+         |('blah', 1706565058001, 1706478758001, 'Asia/Shanghai', 'yyyy-MM-dd hh:mm:ss.SSS', '2024-01-30T05:50:58.001', 'WED'),
+         |(null, 1718841600000, 1704085146456, 'America/New_York', 'yyyy-MM-dd HH', '2024-06-19T20:00:00.000', 'sun'),
+         |('x', 1718841600000, 1704085146456, 'UTC', 'yyyy-MM-dd', '2024-06-20T00:00:00.000', 'SUN')
          |""".stripMargin
     )
   }
@@ -217,6 +218,32 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     checkPlan(df2.queryExecution.executedPlan) { sql =>
       sql.contains("DATEDIFF ( days , CONVERT_TIMEZONE ( 'UTC' , 'America/New_York'")
     }
+  }
 
+  test("aiq_week_diff pushdown") {
+    val table = read.option("dbtable", testTable).load()
+    val df1 = table.selectExpr("aiq_week_diff(1705507488000, ts_ms, 'sun', 'America/New_York')")
+    checkOneCol(df1, Seq(2, 2, 22, 22))
+    checkPlan(df1.queryExecution.executedPlan) { sql =>
+      // https://gist.github.com/dorisZ017/672a12e209611e4698bd4ab9f76d2a9a#file-aiq_week_diff_rsft_1-sql
+      sql.contains("+ 4 ) / 7 )") && sql.contains("FLOOR")
+    }
+    val df2 = table.selectExpr("aiq_week_diff(1705507488000, ts_ms, day_of_week, 'America/New_York')")
+    checkOneCol(df2, Seq(2, 1, 22, 22))
+    checkPlan(df2.queryExecution.executedPlan) { sql =>
+      // https://gist.github.com/dorisZ017/672a12e209611e4698bd4ab9f76d2a9a#file-aiq_week_diff_rsft_2-sql
+      sql.contains("+ CASE WHEN UPPER ( SUBQUERY_0.day_of_week ) IN ( 'SU' , 'SUN' , 'SUNDAY' ) THEN 4")
+    }
+    // bad non-foldable start day
+    val df3 = table.selectExpr("aiq_week_diff(1705507488000, ts_ms, timezone, 'America/New_York')")
+    checkOneCol(df3, Seq(null, null, null, null))
+    checkPlan(df3.queryExecution.executedPlan) { sql =>
+      sql.contains("+ CASE WHEN UPPER ( SUBQUERY_0.timezone ) IN ( 'SU' , 'SUN' , 'SUNDAY' ) THEN 4")
+    }
+    val df4 = table.selectExpr("aiq_week_diff(1705507488000, ts_ms_2, 'wed', timezone)")
+    checkOneCol(df4, Seq(2, 1, -3, -3))
+    checkPlan(df4.queryExecution.executedPlan) { sql =>
+      sql.contains("+ 1 ) / 7 )") && sql.contains("FLOOR")
+    }
   }
 }
