@@ -17,7 +17,7 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, EqualTo, Expression, Extract, Floor, FromUnixTime, Literal, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, Floor, FromUnixTime, In, Literal, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
 import io.github.spark_redshift_community.spark.redshift._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DoubleType, LongType, NullType, StringType, TimestampType}
@@ -182,27 +182,20 @@ private[querygeneration] object DateStatement {
           } else {
             // org.apache.spark.sql.catalyst.util.DateTimeUtils.getAiqDayOfWeekFromString
             CaseWhen(Seq(
-              (EqualTo(Upper(startDay), Literal("SU")), Literal(4)),
-              (EqualTo(Upper(startDay), Literal("SUN")), Literal(4)),
-              (EqualTo(Upper(startDay), Literal("SUNDAY")), Literal(4)),
-              (EqualTo(Upper(startDay), Literal("MO")), Literal(3)),
-              (EqualTo(Upper(startDay), Literal("MON")), Literal(3)),
-              (EqualTo(Upper(startDay), Literal("MONDAY")), Literal(3)),
-              (EqualTo(Upper(startDay), Literal("TU")), Literal(2)),
-              (EqualTo(Upper(startDay), Literal("TUE")), Literal(2)),
-              (EqualTo(Upper(startDay), Literal("TUESDAY")), Literal(2)),
-              (EqualTo(Upper(startDay), Literal("WE")), Literal(1)),
-              (EqualTo(Upper(startDay), Literal("WED")), Literal(1)),
-              (EqualTo(Upper(startDay), Literal("WEDNESDAY")), Literal(1)),
-              (EqualTo(Upper(startDay), Literal("TH")), Literal(0)),
-              (EqualTo(Upper(startDay), Literal("THU")), Literal(0)),
-              (EqualTo(Upper(startDay), Literal("THURSDAY")), Literal(0)),
-              (EqualTo(Upper(startDay), Literal("FR")), Literal(6)),
-              (EqualTo(Upper(startDay), Literal("FRI")), Literal(6)),
-              (EqualTo(Upper(startDay), Literal("FRIDAY")), Literal(6)),
-              (EqualTo(Upper(startDay), Literal("SA")), Literal(5)),
-              (EqualTo(Upper(startDay), Literal("SAT")), Literal(5)),
-              (EqualTo(Upper(startDay), Literal("SATURDAY")), Literal(5))
+              (In(Upper(startDay), Seq(Literal("SU"), Literal("SUN"), Literal("SUNDAY"))),
+                Literal(4)),
+              (In(Upper(startDay), Seq(Literal("MO"), Literal("MON"), Literal("MONDAY"))),
+                Literal(3)),
+              (In(Upper(startDay), Seq(Literal("TU"), Literal("TUE"), Literal("TUESDAY"))),
+                Literal(2)),
+              (In(Upper(startDay), Seq(Literal("WE"), Literal("WED"), Literal("WEDNESDAY"))),
+                Literal(1)),
+              (In(Upper(startDay), Seq(Literal("TH"), Literal("THU"), Literal("THURSDAY"))),
+                Literal(0)),
+              (In(Upper(startDay), Seq(Literal("FR"), Literal("FRI"), Literal("FRIDAY"))),
+                Literal(6)),
+              (In(Upper(startDay), Seq(Literal("SA"), Literal("SAT"), Literal("SATURDAY"))),
+                Literal(5))
             ))
           }
         }

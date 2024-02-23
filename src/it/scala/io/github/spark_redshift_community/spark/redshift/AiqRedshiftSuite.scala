@@ -232,7 +232,18 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     checkOneCol(df2, Seq(2, 1, 22, 22))
     checkPlan(df2.queryExecution.executedPlan) { sql =>
       // https://gist.github.com/dorisZ017/672a12e209611e4698bd4ab9f76d2a9a#file-aiq_week_diff_rsft_2-sql
-      sql.contains("WHEN ( UPPER ( SUBQUERY_0.day_of_week ) = 'THURSDAY' ) THEN 0")
+      sql.contains("+ CASE WHEN UPPER ( SUBQUERY_0.day_of_week ) IN ( 'SU' , 'SUN' , 'SUNDAY' ) THEN 4")
+    }
+    // bad non-foldable start day
+    val df3 = table.selectExpr("aiq_week_diff(1705507488000, ts_ms, timezone, 'America/New_York')")
+    checkOneCol(df3, Seq(null, null, null, null))
+    checkPlan(df3.queryExecution.executedPlan) { sql =>
+      sql.contains("+ CASE WHEN UPPER ( SUBQUERY_0.timezone ) IN ( 'SU' , 'SUN' , 'SUNDAY' ) THEN 4")
+    }
+    val df4 = table.selectExpr("aiq_week_diff(1705507488000, ts_ms_2, 'wed', timezone)")
+    checkOneCol(df4, Seq(2, 1, -3, -3))
+    checkPlan(df4.queryExecution.executedPlan) { sql =>
+      sql.contains("+ 1 ) / 7 )") && sql.contains("FLOOR")
     }
   }
 }
