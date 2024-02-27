@@ -246,4 +246,27 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
       sql.contains("+ 1 ) / 7 )") && sql.contains("FLOOR")
     }
   }
+
+  test("aiq_day_of_the_week pushdown") {
+    val table = read.option("dbtable", testTable).load()
+    val df1 = table.selectExpr("aiq_day_of_the_week(ts_ms_2, 'Asia/Shanghai')")
+    checkOneCol(df1, Seq("tuesday", "monday", "monday", "monday"))
+    checkPlan(df1.queryExecution.executedPlan) { sql =>
+      /*
+      LOWER ( TO_CHAR (
+         CONVERT_TIMEZONE ( 'UTC' ,
+           'Asia/Shanghai' ,
+           TIMESTAMP'epoch' + ( ( CAST ( SUBQUERY_0.ts_ms_2 AS FLOAT ) / 1000.0 ) * INTERVAL '1 SECOND' ) ) ,
+         'FMDay' )
+       */
+      sql.contains("( LOWER ( TO_CHAR ( CONVERT_TIMEZONE ( 'UTC' , 'Asia/Shanghai'") &&
+        sql.contains("'FMDay'")
+    }
+    val df2 = table.selectExpr("aiq_day_of_the_week(ts_ms_2, timezone)")
+    checkOneCol(df2, Seq("tuesday", "monday", "sunday", "monday"))
+    checkPlan(df2.queryExecution.executedPlan) { sql =>
+      sql.contains("( LOWER ( TO_CHAR ( CONVERT_TIMEZONE ( 'UTC' , SUBQUERY_0.timezone") &&
+        sql.contains("'FMDay'")
+    }
+  }
 }
