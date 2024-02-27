@@ -17,7 +17,7 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, Floor, FromUnixTime, In, Literal, Lower, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, Floor, In, Literal, Lower, MakeInterval, MillisToTimestamp, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
 import io.github.spark_redshift_community.spark.redshift._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DoubleType, LongType, NullType, StringType, TimestampType}
@@ -103,17 +103,11 @@ private[querygeneration] object DateStatement {
         ).collect { case Some(stmt) => stmt }
         blockStatement(mkStatement(stmtParts, "+"))
 
-      case FromUnixTime(sec, _, None) =>
-        val intervalExpr = MakeInterval(
-          years = Literal.default(NullType),
-          months = Literal.default(NullType),
-          weeks = Literal.default(NullType),
-          days = Literal.default(NullType),
-          hours = Literal.default(NullType),
-          mins = Literal.default(NullType),
-          secs = sec
-        )
-        ConstantString("TIMESTAMP'epoch' +") + convertStatement(intervalExpr, fields)
+      case MillisToTimestamp(child) =>
+      // https://stackoverflow.com/a/64656770
+      // TIMESTAMP'epoch' + ms * INTERVAL'0.001 SECOND'
+        ConstantString("TIMESTAMP'epoch' +") +
+          convertStatement(child, fields) + "* INTERVAL'0.001 SECOND'"
 
       case UnixMillis(child) =>
         // CAST ( EXTRACT ('epoch' from ts) AS BIGINT) * 1000 +
@@ -128,9 +122,7 @@ private[querygeneration] object DateStatement {
       case AiqDateToString(ts, fmt, tz) if fmt.foldable =>
         convertStatement(
           DateFormatClass(
-            ConvertTimezone(
-              Literal("UTC"), tz, FromUnixTime(Divide(Cast(ts, DoubleType), Literal(1000.0)), fmt)
-            ),
+            ConvertTimezone(Literal("UTC"), tz, MillisToTimestamp(ts)),
             validFmtExpr(fmt)
           ),
           fields
@@ -162,12 +154,7 @@ private[querygeneration] object DateStatement {
 
       case AiqDayDiff(startTs, endTs, timezoneId) =>
         val Seq(startDt, endDt) = Seq(startTs, endTs).map { ts =>
-          ConvertTimezone(
-            Literal("UTC"),
-            timezoneId,
-            FromUnixTime(Divide(Cast(ts, DoubleType), Literal(1000.0)), Literal.default(NullType)
-            )
-          )
+          ConvertTimezone(Literal("UTC"), timezoneId, MillisToTimestamp(ts))
         }
         convertStatement(DateDiff(endDt, startDt), fields)
 
@@ -207,14 +194,7 @@ private[querygeneration] object DateStatement {
         convertStatement(
           Lower(
             DateFormatClass(
-              ConvertTimezone(
-                Literal("UTC"),
-                timezoneId,
-                FromUnixTime(
-                  Divide(Cast(epochTimestamp, DoubleType), Literal(1000.0)),
-                  Literal.default(NullType)
-                )
-              ),
+              ConvertTimezone(Literal("UTC"), timezoneId, MillisToTimestamp(epochTimestamp)),
               validFmtExpr(Literal("EEEE"))
             )
           ),
