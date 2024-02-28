@@ -17,7 +17,7 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, Floor, FromUnixTime, In, Literal, MakeInterval, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, Floor, In, Literal, Lower, MakeInterval, MillisToTimestamp, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
 import io.github.spark_redshift_community.spark.redshift._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DoubleType, LongType, NullType, StringType, TimestampType}
@@ -103,17 +103,11 @@ private[querygeneration] object DateStatement {
         ).collect { case Some(stmt) => stmt }
         blockStatement(mkStatement(stmtParts, "+"))
 
-      case FromUnixTime(sec, _, None) =>
-        val intervalExpr = MakeInterval(
-          years = Literal.default(NullType),
-          months = Literal.default(NullType),
-          weeks = Literal.default(NullType),
-          days = Literal.default(NullType),
-          hours = Literal.default(NullType),
-          mins = Literal.default(NullType),
-          secs = sec
-        )
-        ConstantString("TIMESTAMP'epoch' +") + convertStatement(intervalExpr, fields)
+      case MillisToTimestamp(child) =>
+      // https://stackoverflow.com/a/64656770
+      // TIMESTAMP'epoch' + ms * INTERVAL'0.001 SECOND'
+        ConstantString("TIMESTAMP'epoch' +") +
+          convertStatement(child, fields) + "* INTERVAL'0.001 SECOND'"
 
       case UnixMillis(child) =>
         // CAST ( EXTRACT ('epoch' from ts) AS BIGINT) * 1000 +
@@ -128,9 +122,7 @@ private[querygeneration] object DateStatement {
       case AiqDateToString(ts, fmt, tz) if fmt.foldable =>
         convertStatement(
           DateFormatClass(
-            ConvertTimezone(
-              Literal("UTC"), tz, FromUnixTime(Divide(Cast(ts, DoubleType), Literal(1000.0)), fmt)
-            ),
+            ConvertTimezone(Literal("UTC"), tz, MillisToTimestamp(ts)),
             validFmtExpr(fmt)
           ),
           fields
@@ -162,14 +154,7 @@ private[querygeneration] object DateStatement {
 
       case AiqDayDiff(startTs, endTs, timezoneId) =>
         val Seq(startDt, endDt) = Seq(startTs, endTs).map { ts =>
-          ConvertTimezone(
-            Literal("UTC"),
-            timezoneId,
-            FromUnixTime(
-              Divide(Cast(ts, DoubleType), Literal(1000.0)),
-              Literal.default(NullType)
-            )
-          )
+          ConvertTimezone(Literal("UTC"), timezoneId, MillisToTimestamp(ts))
         }
         convertStatement(DateDiff(endDt, startDt), fields)
 
@@ -182,21 +167,20 @@ private[querygeneration] object DateStatement {
           } else {
             // org.apache.spark.sql.catalyst.util.DateTimeUtils.getAiqDayOfWeekFromString
             CaseWhen(Seq(
-              (In(Upper(startDay), Seq(Literal("SU"), Literal("SUN"), Literal("SUNDAY"))),
-                Literal(4)),
-              (In(Upper(startDay), Seq(Literal("MO"), Literal("MON"), Literal("MONDAY"))),
-                Literal(3)),
-              (In(Upper(startDay), Seq(Literal("TU"), Literal("TUE"), Literal("TUESDAY"))),
-                Literal(2)),
-              (In(Upper(startDay), Seq(Literal("WE"), Literal("WED"), Literal("WEDNESDAY"))),
-                Literal(1)),
-              (In(Upper(startDay), Seq(Literal("TH"), Literal("THU"), Literal("THURSDAY"))),
-                Literal(0)),
-              (In(Upper(startDay), Seq(Literal("FR"), Literal("FRI"), Literal("FRIDAY"))),
-                Literal(6)),
-              (In(Upper(startDay), Seq(Literal("SA"), Literal("SAT"), Literal("SATURDAY"))),
-                Literal(5))
-            ))
+              ("SU", "SUN", "SUNDAY", 4),
+              ("MO", "MON", "MONDAY", 3),
+              ("TU", "TUE", "TUESDAY", 2),
+              ("WE", "WED", "WEDNESDAY", 1),
+              ("TH", "THU", "THURSDAY", 0),
+              ("FR", "FRI", "FRIDAY", 6),
+              ("SA", "SAT", "SATURDAY", 5)
+            ).map { case (nameAlt1, nameAlt2, nameAlt3, value) =>
+              (
+                In(Upper(startDay),
+                  Seq(Literal(nameAlt1), Literal(nameAlt2), Literal(nameAlt3))),
+                Literal(value)
+              )
+            })
           }
         }
         val Seq(startWeeksSinceEpoch, endWeeksSinceEpoch) = Seq(startTs, endTs).map { ms =>
@@ -204,6 +188,18 @@ private[querygeneration] object DateStatement {
           Floor(Divide(Add(daysSinceEpoch, startDayNumber), Literal(7)))
         }
         convertStatement(Subtract(endWeeksSinceEpoch, startWeeksSinceEpoch), fields)
+
+      case AiqDayOfTheWeek(epochTimestamp, timezoneId) =>
+        // format timestamp with day of week pattern
+        convertStatement(
+          Lower(
+            DateFormatClass(
+              ConvertTimezone(Literal("UTC"), timezoneId, MillisToTimestamp(epochTimestamp)),
+              validFmtExpr(Literal("EEEE"))
+            )
+          ),
+          fields
+        )
 
       case _ => null
     })
@@ -217,6 +213,7 @@ private[querygeneration] object DateStatement {
       .replaceAll("mm", "MI")
       .replaceAll("a", "AM")
       .replaceAll(".sss|.SSS", ".MS")
+      .replaceAll("EEEE", "FMDay")
     Literal(validFmt)
   }
 }

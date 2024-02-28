@@ -103,10 +103,10 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
       /*
       TO_CHAR (
         CONVERT_TIMEZONE (
-         'UTC' ,
-         'America/New_York' ,
-         TIMESTAMP'epoch' + ( ( CAST ( SUBQUERY_0.ts_ms AS FLOAT ) / 1000 ) * INTERVAL '1 SECOND' ) ) ,
-       'yyyy/MM/dd"T"HH24:MI:ss.MS' )
+          'UTC', 'America/New_York', TIMESTAMP 'epoch' + SUBQUERY_0.ts_ms * INTERVAL '0.001 SECOND'
+        ),
+        'yyyy/MM/dd"T"HH24:MI:ss.MS'
+      )
        */
       sql.contains("TO_CHAR ( CONVERT_TIMEZONE ( 'UTC' , 'America/New_York'") &&
         sql.contains("'yyyy/MM/dd\"T\"HH24:MI:ss.MS'")
@@ -187,35 +187,23 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     val table = read.option("dbtable", testTable).load()
     val df1 = table.selectExpr("aiq_day_diff(ts_ms, ts_ms_2, timezone)")
     checkOneCol(df1, Seq(1, -1, -171, -171))
-    /*
-    DATEDIFF (
-      days,
-      CONVERT_TIMEZONE (
-        'UTC',
-        SUBQUERY_0.timezone,
-        TIMESTAMP 'epoch' + (
-          (
-            CAST (SUBQUERY_0.ts_ms AS FLOAT) / 1000.0
-          ) * INTERVAL '1 SECOND'
-        )
-      ),
-      CONVERT_TIMEZONE (
-        'UTC',
-        SUBQUERY_0.timezone,
-        TIMESTAMP 'epoch' + (
-          (
-            CAST (SUBQUERY_0.ts_ms_2 AS FLOAT) / 1000.0
-          ) * INTERVAL '1 SECOND'
-        )
-      )
-    )
-     */
     checkPlan(df1.queryExecution.executedPlan) { sql =>
       sql.contains("DATEDIFF ( days , CONVERT_TIMEZONE ( 'UTC' , SUBQUERY_0.timezone")
     }
     val df2 = table.selectExpr("aiq_day_diff(1704085146456, ts_ms, 'America/New_York')")
     checkOneCol(df2, Seq(29, 29, 171, 171))
     checkPlan(df2.queryExecution.executedPlan) { sql =>
+      /*
+      DATEDIFF (
+        days,
+        CONVERT_TIMEZONE (
+          'UTC', 'America/New_York', TIMESTAMP 'epoch' + 1704085146456 * INTERVAL '0.001 SECOND'
+        ),
+        CONVERT_TIMEZONE (
+          'UTC', 'America/New_York', TIMESTAMP 'epoch' + SUBQUERY_0.ts_ms * INTERVAL '0.001 SECOND'
+        )
+      )
+       */
       sql.contains("DATEDIFF ( days , CONVERT_TIMEZONE ( 'UTC' , 'America/New_York'")
     }
   }
@@ -244,6 +232,32 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     checkOneCol(df4, Seq(2, 1, -3, -3))
     checkPlan(df4.queryExecution.executedPlan) { sql =>
       sql.contains("+ 1 ) / 7 )") && sql.contains("FLOOR")
+    }
+  }
+
+  test("aiq_day_of_the_week pushdown") {
+    val table = read.option("dbtable", testTable).load()
+    val df1 = table.selectExpr("aiq_day_of_the_week(ts_ms_2, 'Asia/Shanghai')")
+    checkOneCol(df1, Seq("tuesday", "monday", "monday", "monday"))
+    checkPlan(df1.queryExecution.executedPlan) { sql =>
+      /*
+      LOWER (
+        TO_CHAR (
+          CONVERT_TIMEZONE (
+            'UTC', 'Asia/Shanghai', TIMESTAMP 'epoch' + SUBQUERY_0.ts_ms_2 * INTERVAL '0.001 SECOND'
+          ),
+          'FMDay'
+        )
+      )
+       */
+      sql.contains("( LOWER ( TO_CHAR ( CONVERT_TIMEZONE ( 'UTC' , 'Asia/Shanghai'") &&
+        sql.contains("'FMDay'")
+    }
+    val df2 = table.selectExpr("aiq_day_of_the_week(ts_ms_2, timezone)")
+    checkOneCol(df2, Seq("tuesday", "monday", "sunday", "monday"))
+    checkPlan(df2.queryExecution.executedPlan) { sql =>
+      sql.contains("( LOWER ( TO_CHAR ( CONVERT_TIMEZONE ( 'UTC' , SUBQUERY_0.timezone") &&
+        sql.contains("'FMDay'")
     }
   }
 }
