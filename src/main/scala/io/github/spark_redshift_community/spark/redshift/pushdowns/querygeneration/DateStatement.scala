@@ -17,7 +17,7 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, Floor, In, Literal, Lower, MakeInterval, MillisToTimestamp, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqDayStart, AiqStringToDate, AiqWeekDiff, Attribute, CaseWhen, Cast, ConvertTimezone, DateAdd, DateDiff, DateFormatClass, DateSub, Divide, Expression, Extract, Floor, In, Literal, Lower, MakeInterval, MillisToTimestamp, Month, Multiply, ParseToTimestamp, Quarter, Subtract, TruncDate, TruncTimestamp, UnixMillis, Upper, Year}
 import io.github.spark_redshift_community.spark.redshift._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DoubleType, LongType, NullType, StringType, TimestampType}
@@ -200,6 +200,22 @@ private[querygeneration] object DateStatement {
           ),
           fields
         )
+
+      case AiqDayStart(timestamp, timezone, plusDays) =>
+        val dateExpr = UnixMillis(
+          ConvertTimezone(
+            timezone,
+            Literal("UTC"),
+            TruncTimestamp(
+              Literal("DAY"),
+              DateAdd(
+                ConvertTimezone(Literal("UTC"), timezone, MillisToTimestamp(timestamp)),
+                plusDays
+              )
+            )
+          )
+        )
+        convertStatement(dateExpr, fields)
 
       case _ => null
     })
