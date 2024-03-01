@@ -86,13 +86,24 @@ private[querygeneration] object DateStatement {
         def helper(expr: Expression, dtPart: String): Option[RedshiftPushDownSqlStatement] = {
           val stmt = if (expr.foldable) {
             // handles null
-            Option(expr.eval()).map { v => ConstantString(v.toString).toStatement }
+            Option(expr.eval()).collect {
+              case v if v.toString.toDouble != 0.0 => ConstantString(v.toString).toStatement
+            }
           } else { Option(convertStatement(expr, fields)) }
 
           // e.g. SELECT 2 * INTERVAL '1 SECOND'
           stmt.map(s => s + "*" + s"INTERVAL '1 $dtPart'")
         }
-        val totalDays = Add(Multiply(weeks, Literal(7)), days)
+        // days + 7 * weeks if (weeks is not null or 0)
+        val totalDays = {
+          if (weeks.foldable) {
+            val weekNum = Option(expr.eval()).fold(0)(_.toString.toInt)
+            if (weekNum != 0) {
+              // no need to add to statements if it's 0
+              Add(Multiply(Literal(weekNum), Literal(7)), days)
+            } else { days }
+          } else { Add(Multiply(weeks, Literal(7)), days) }
+        }
         val stmtParts = Seq(
           helper(years, "YEAR"),
           helper(months, "MONTH"),
