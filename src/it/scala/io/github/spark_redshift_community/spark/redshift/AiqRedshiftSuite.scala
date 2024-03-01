@@ -260,4 +260,20 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
         sql.contains("'FMDay'")
     }
   }
+
+  test("aiq_day_start pushdown") {
+    val table = read.option("dbtable", testTable).load()
+    val df1 = table.selectExpr("aiq_day_start(ts_ms_2, 'America/New_York', 180)")
+    checkOneCol(df1, Seq(1722139200000L, 1721966400000L, 1719547200000L, 1719547200000L))
+    checkPlan(df1.queryExecution.executedPlan) { sql =>
+      // https://gist.github.com/dorisZ017/0afe86d57a5c14982757fb166d5e9077
+      sql.contains("EXTRACT ( 'epoch' FROM CONVERT_TIMEZONE ( 'America/New_York' , 'UTC' , DATE_TRUNC (") &&
+        sql.contains("DATEADD ( day, 180")
+    }
+    val df2 = table.selectExpr("aiq_day_start(ts_ms_2, timezone, -1)")
+    checkOneCol(df2, Seq(1706504400000L, 1706371200000L, 1703912400000L, 1703980800000L))
+    checkPlan(df2.queryExecution.executedPlan) { sql =>
+      sql.contains("DATEADD ( day, -1")
+    }
+  }
 }
