@@ -17,10 +17,9 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CaseWhen, Cast, Coalesce, Descending, Expression, If, In, InSet, Literal, MakeDecimal, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CaseWhen, Cast, Coalesce, Descending, Expression, If, In, InSet, Literal, MakeDecimal, Nvl2, ScalarSubquery, Sha2, ShiftLeft, ShiftRight, SortOrder, UnscaledValue}
 import org.apache.spark.sql.types.{Decimal, _}
 import org.apache.spark.unsafe.types.UTF8String
-
 import io.github.spark_redshift_community.spark.redshift._
 
 /** Extractors for everything else. */
@@ -130,6 +129,27 @@ private[querygeneration] object MiscStatement {
             )
           )
 
+      case Sha2(left, right) =>
+        // Spark always casts left to binary, need to convert back to string for Redshift
+        ConstantString("SHA2") + blockStatement(
+          mkStatement(Seq(
+            convertStatement(Cast(left, StringType), fields),
+            convertStatement(right, fields)
+          ))
+        )
+
+      case Nvl2(expr1, expr2, expr3, _) =>
+        if (!expr1.nullable) { convertStatement(expr2, fields) } else {
+          if (expr1.foldable) {
+            val resExpr = if (Option(expr1.eval()).nonEmpty) expr2 else expr3
+            convertStatement(resExpr, fields)
+          } else {
+            functionStatement(
+              "NVL2", Seq(expr1, expr2, expr3).map(convertStatement(_, fields))
+            )
+          }
+        }
+
       case _ => null
     })
   }
@@ -156,7 +176,7 @@ private[querygeneration] object MiscStatement {
   private[querygeneration] final def getCastType(t: DataType): Option[String] =
     Option(t match {
       case StringType => "VARCHAR"
-      case BinaryType => "BINARY"
+      case BinaryType => "VARBINARY"
       case DateType => "DATE"
       case TimestampType => "TIMESTAMP"
       case d: DecimalType =>

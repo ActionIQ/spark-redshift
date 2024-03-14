@@ -17,21 +17,8 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{
-  And,
-  Attribute,
-  BinaryOperator,
-  BitwiseAnd,
-  BitwiseNot,
-  BitwiseOr,
-  BitwiseXor,
-  EqualNullSafe,
-  Expression,
-  Literal,
-  Or
-}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, EqualNullSafe, EqualTo, Expression, IsNull, Literal, Or}
 import org.apache.spark.sql.types._
-
 import io.github.spark_redshift_community.spark.redshift._
 
 
@@ -86,8 +73,19 @@ private[querygeneration] object BasicStatement {
           convertStatement(child, fields)
         )
       case EqualNullSafe(left, right) =>
-        ConstantString("EQUAL_NULL") + blockStatement(
-          convertStatements(fields, left, right)
+        // EXE-2105: no native null safe function, so turn it into a composite expression,
+        // also dont use Or/And because it will not behave correctly if this expression is
+        // under a NOT (e.x. EqualTo can return a NULL, so if you NOT that its still NULL...
+        // this function should be safe and always return a bool)
+        convertStatement(
+          CaseWhen(
+            Seq(
+              EqualTo(left, right) -> Cast(Literal(true), BooleanType),
+              And(IsNull(left), IsNull(right)) -> Cast(Literal(true), BooleanType)
+            ),
+            Cast(Literal(false), BooleanType)
+          ),
+          fields
         )
       case b: BinaryOperator =>
         blockStatement(
