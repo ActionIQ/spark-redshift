@@ -206,6 +206,12 @@ case class AggregateQueryRedshift(columns: Seq[NamedExpression],
       // are no grouping expressions
       ConstantString("LIMIT 1").toStatement
     }
+
+  override def getStatement(useAlias: Boolean): RedshiftPushDownSqlStatement = {
+    if (groups.nonEmpty) { super.getStatement(useAlias) } else {
+      ConstantString("SELECT * FROM") + blockStatement(super.getStatement(useAlias))
+    }
+  }
 }
 
 /** The query for Sort and Limit operations.

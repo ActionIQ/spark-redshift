@@ -48,12 +48,21 @@ private[querygeneration] object StringStatement {
           blockStatement(convertStatements(fields, expr.children: _*))
 
       case Concat(children) =>
-        val rightSide =
-          if (children.length > 2) Concat(children.drop(1)) else children(1)
-        ConstantString("CONCAT") + blockStatement(
-          convertStatement(children.head, fields) + "," +
-            convertStatement(rightSide, fields)
-        )
+        val emptyStmt = convertStatement(Literal.default(expr.dataType), fields)
+        val defaultFuncStmt = functionStatement(
+          expr.prettyName.toUpperCase, children.map(convertStatement(_, fields)))
+        children.size match {
+          // redshift doesn't allow 0 or 1 argument
+          case 0 => emptyStmt
+          case 1 => convertStatement(children.head, fields)
+          case 2 => defaultFuncStmt
+          case _ =>
+            // https://docs.aws.amazon.com/redshift/latest/dg/r_CONCAT.html
+            // using nested concat instead of `||` b/c it's easier to manage parentheses
+            convertStatement(
+              Concat(Seq(children.head, Concat(children.tail))), fields
+            )
+        }
 
       case ConcatWs(children) =>
         def coalesceIfNullable(e: Expression): Expression = {

@@ -18,7 +18,8 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
          |timezone varchar(50),
          |fmt varchar(100),
          |ts_str varchar(100),
-         |day_of_week varchar(100)
+         |day_of_week varchar(100),
+         |str_not_null varchar(100) not null
          |)
       """.stripMargin
     )
@@ -26,10 +27,10 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     conn.createStatement().executeUpdate(
       s"""
          |insert into $tableName values
-         |('ASDF', 1706565058123, 1706590812001, 'EST', 'yyyy/MM/ddThh:mm:ss', '2024-01-29T16:50:58.123', 'Mon'),
-         |('blah', 1706565058001, 1706478758001, 'Asia/Shanghai', 'yyyy-MM-dd hh:mm:ss.SSS', '2024-01-30T05:50:58.001', 'WED'),
-         |(null, 1718841600000, 1704085146456, 'America/New_York', 'yyyy-MM-dd HH', '2024-06-19T20:00:00.000', 'sun'),
-         |('x', 1718841600000, 1704085146456, 'UTC', 'yyyy-MM-dd', '2024-06-20T00:00:00.000', 'SUN')
+         |('ASDF', 1706565058123, 1706590812001, 'EST', 'yyyy/MM/ddThh:mm:ss', '2024-01-29T16:50:58.123', 'Mon', 'abc'),
+         |('blah', 1706565058001, 1706478758001, 'Asia/Shanghai', 'yyyy-MM-dd hh:mm:ss.SSS', '2024-01-30T05:50:58.001', 'WED', 'def'),
+         |(null, 1718841600000, 1704085146456, 'America/New_York', 'yyyy-MM-dd HH', '2024-06-19T20:00:00.000', 'sun', 'XYZ'),
+         |('x', 1718841600000, 1704085146456, 'UTC', 'yyyy-MM-dd', '2024-06-20T00:00:00.000', 'SUN', 'boo')
          |""".stripMargin
     )
   }
@@ -90,6 +91,80 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     assert(RedshiftPushDownSqlStatement.capturedQueries.exists(_.contains("LIMIT 3")))
   }
 
+  test("null safe equal pushdown") {
+    val filteredDf = read.option("dbtable", testTable).load().where("lower(teststring) <=> 'asdf'")
+    assert(filteredDf.count() === 1L)
+    checkPlan(filteredDf.queryExecution.executedPlan) { sql =>
+      sql.contains(
+        "CASE WHEN ( LOWER ( SUBQUERY_0.teststring ) = 'asdf' ) THEN true  " +
+          "WHEN ( ( LOWER ( SUBQUERY_0.teststring ) IS NULL ) AND ( 'asdf' IS NULL ) ) THEN true " +
+          "ELSE false END"
+      )
+    }
+  }
+
+  test("approx_count_distinct pushdown") {
+    val df = read.option("dbtable", testTable).load().selectExpr("approx_count_distinct(teststring)")
+    checkOneCol(df, Seq(3L))
+    checkPlan(df.queryExecution.sparkPlan) { sql =>
+      sql.contains("APPROXIMATE COUNT ( DISTINCT SUBQUERY_1.SUBQUERY_1_COL_0 )")
+    }
+  }
+
+  test("instr pushdown") {
+    val df = read.option("dbtable", testTable).load().selectExpr("instr(teststring, 'a')")
+    checkOneCol(df, Seq(0, 3, null, 0))
+    checkPlan(df.queryExecution.executedPlan) { sql =>
+      sql.contains("POSITION ( 'a' IN SUBQUERY_0.teststring )")
+    }
+  }
+
+  test("sha2 pushdown") {
+    val df = read.option("dbtable", testTable).load().selectExpr("sha2(teststring, 256)")
+    checkOneCol(df, Seq(
+      "99b3bcf690e653a177c602dd9999093b9eb29e50a3af9a059af3fcbfab476a16",
+      "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52",
+      null,
+      "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"))
+    checkPlan(df.queryExecution.executedPlan) { sql =>
+      sql.contains(
+        "SHA2 ( CAST ( CAST ( SUBQUERY_0.teststring AS VARBINARY ) AS VARCHAR ) , 256 )"
+      )
+    }
+  }
+
+  test("concat and concat_ws pushdown") {
+    val table = read.option("dbtable", testTable).load()
+    val df1 = table.selectExpr("concat(teststring, 'blah', teststring)")
+    checkOneCol(df1, Seq("ASDFblahASDF", "blahblahblah", null, "xblahx"))
+    checkPlan(df1.queryExecution.executedPlan) { sql =>
+      sql.contains("CONCAT ( SUBQUERY_0.teststring , CONCAT ( 'blah' , SUBQUERY_0.teststring ) )")
+    }
+
+    val df2 = table.selectExpr("concat_ws('-', teststring, str_not_null, 'blah')")
+    checkOneCol(df2, Seq("ASDF-abc-blah", "blah-def-blah", "XYZ-blah", "x-boo-blah"))
+    checkPlan(df2.queryExecution.executedPlan) { sql =>
+      sql.contains("CONCAT ( CASE WHEN ( SUBQUERY_0.teststring IS NOT NULL ) THEN CONCAT ( SUBQUERY_0.teststring , '-' ) ELSE '' END , CONCAT ( CONCAT ( SUBQUERY_0.str_not_null , '-' ) , 'blah' )")
+    }
+
+    val df3 = table.selectExpr("concat_ws(teststring, 'abc', 'xyz', 'BOO')")
+    checkOneCol(df3, Seq("abcASDFxyzASDFBOO", "abcblahxyzblahBOO", null, "abcxxyzxBOO"))
+    checkPlan(df3.queryExecution.executedPlan) { sql =>
+      sql.contains("CONCAT ( 'abc' , CONCAT ( SUBQUERY_0.teststring , CONCAT ( 'xyz' , CONCAT ( SUBQUERY_0.teststring , NVL2 ( SUBQUERY_0.teststring , 'BOO' , NULL ) ) ) ) )")
+    }
+
+    val df4 = table.selectExpr("concat_ws('-', coalesce(str_not_null, 'BOO'), 'foo', 'bar')")
+    checkOneCol(df4, Seq("abc-foo-bar", "def-foo-bar", "XYZ-foo-bar", "boo-foo-bar"))
+    checkPlan(df4.queryExecution.executedPlan) { sql =>
+      sql.contains("CONCAT ( SUBQUERY_0.str_not_null , CONCAT ( '-' , CONCAT ( 'foo' , CONCAT ( '-' , 'bar' ) ) ) )")
+    }
+
+    val df5 = table.selectExpr("concat_ws('-', 'blah', str_not_null)")
+    checkOneCol(df5, Seq("blah-abc", "blah-def", "blah-XYZ", "blah-boo"))
+    checkPlan(df5.queryExecution.executedPlan) { sql =>
+      sql.contains("CONCAT ( 'blah' , CONCAT ( '-' , SUBQUERY_0.str_not_null ) )")
+    }
+  }
 
   test("aiq_date_to_string pushdown") {
     val table = read.option("dbtable", testTable).load()
@@ -276,4 +351,5 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
       sql.contains("DATEADD ( day, -1")
     }
   }
+
 }

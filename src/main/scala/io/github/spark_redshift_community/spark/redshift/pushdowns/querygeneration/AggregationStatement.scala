@@ -45,6 +45,13 @@ private[querygeneration] object AggregationStatement {
                 blockStatement(
                   distinct + convertStatements(fields, agg_fun.children: _*)
                 )
+
+            case _: HyperLogLogPlusPlus =>
+              ConstantString("APPROXIMATE COUNT") +
+                blockStatement(ConstantString("DISTINCT") +
+                  convertStatements(fields, agg_fun.children: _*)
+                )
+
             case _ =>
               // This exception is not a real issue. It will be caught in
               // QueryBuilder.
