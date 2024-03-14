@@ -209,6 +209,7 @@ case class AggregateQueryRedshift(columns: Seq[NamedExpression],
 
   override def getStatement(useAlias: Boolean): RedshiftPushDownSqlStatement = {
     if (groups.nonEmpty) { super.getStatement(useAlias) } else {
+      // [DP-172]
       ConstantString("SELECT * FROM") + blockStatement(super.getStatement(useAlias))
     }
   }
