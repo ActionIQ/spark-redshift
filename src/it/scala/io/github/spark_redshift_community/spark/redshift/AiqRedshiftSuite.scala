@@ -166,6 +166,14 @@ class AiqRedshiftSuite extends IntegrationSuiteBase {
     }
   }
 
+  test("string reverse pushdown") {
+    val df = read.option("dbtable", testTable).load().selectExpr("reverse(teststring)")
+    checkOneCol(df, Seq("FDSA", "halb", null, "x"))
+    checkPlan(df.queryExecution.executedPlan) { sql =>
+      sql.contains("REVERSE")
+    }
+  }
+
   test("aiq_date_to_string pushdown") {
     val table = read.option("dbtable", testTable).load()
     val df1 = table.selectExpr(
