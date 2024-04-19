@@ -116,6 +116,7 @@ private[redshift] case class RedshiftRelation(
     val tempDir = params.createPerQueryTempDir()
     val unloadSql = buildUnloadStmt(query, tempDir, creds, params.sseKmsKey)
     val conn = jdbcWrapper.getConnector(params)
+    val querySubmissionTime = System.currentTimeMillis()
     try {
       jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
     } finally {
@@ -143,12 +144,22 @@ private[redshift] case class RedshiftRelation(
       }
     }
 
-    sqlContext.read
+    val firstRowReadAt = System.currentTimeMillis()
+    val rdd = sqlContext.read
       .format(classOf[RedshiftFileFormat].getName)
       .schema(schema)
       .option("nullString", params.nullString)
       .load(filesToRead: _*)
       .queryExecution.executedPlan.execute()
+    val lastRowReadAt = System.currentTimeMillis()
+    log.info(
+      s"""Statistics:
+         | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
+         | warehouse_query_latency=${firstRowReadAt - querySubmissionTime} ms
+         | data_source=redshift
+         |""".stripMargin
+    )
+    rdd
   }
   /**
    * Check if S3 and redshift are in same region
