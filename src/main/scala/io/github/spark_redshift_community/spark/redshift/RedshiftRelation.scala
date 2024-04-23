@@ -156,7 +156,7 @@ private[redshift] case class RedshiftRelation(
       s"""Statistics:
          | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
          | warehouse_query_latency=${firstRowReadAt - querySubmissionTime} ms
-         | data_source=redshift
+         | data_source=redshift_unload
          |""".stripMargin
     )
     rdd
