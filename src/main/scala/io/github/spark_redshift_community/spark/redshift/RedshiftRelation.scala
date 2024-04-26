@@ -92,14 +92,25 @@ private[redshift] case class RedshiftRelation(
     val conn = jdbcWrapper.getConnector(params)
     val queryWithTag = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, query)
     try {
+      val querySubmissionTime = System.currentTimeMillis()
       val results = jdbcWrapper.executeQueryInterruptibly(conn.prepareStatement(queryWithTag))
       if (results.next()) {
         val numRows = results.getLong(1)
         val parallelism = sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
         val emptyRow = RowEncoder(StructType(Seq.empty)).createSerializer().apply(Row(Seq.empty))
-        sqlContext.sparkContext
+        val firstRowReadAt = System.currentTimeMillis()
+        val rdd = sqlContext.sparkContext
           .parallelize(1L to numRows, parallelism)
           .map(_ => emptyRow)
+        val lastRowReadAt = System.currentTimeMillis()
+        log.info(
+          s"""Statistics:
+             | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
+             | warehouse_query_latency=${firstRowReadAt - querySubmissionTime} ms
+             | data_source=redshift_unload
+             |""".stripMargin
+        )
+        rdd
       } else {
         throw new IllegalStateException("Could not read count from Redshift")
       }
