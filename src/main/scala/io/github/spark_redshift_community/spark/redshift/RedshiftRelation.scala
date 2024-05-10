@@ -111,23 +111,11 @@ private[redshift] case class RedshiftRelation(
           "warehouse_query_latency_millis" ->
             s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
           "data_source" -> "redshift_unload",
-          "query_submission_time" -> querySubmissionTime.toString,
+          "query_submitted_at" -> querySubmissionTime.toString,
           "first_row_read_at"-> firstRowReadAt.toString,
           "last_row_read_at" -> lastRowReadAt.toString,
         )
         SparkContext.emitLog(tags)
-//        log.info(
-//          s"""Statistics:
-//             | warehouse_read_latency=
-//             | ${Duration.between(firstRowReadAt, lastRowReadAt).toMillis} ms
-//             | warehouse_query_latency=
-//             | ${Duration.between(querySubmissionTime, firstRowReadAt).toMillis} ms
-//             | data_source=redshift_unload
-//             | query_submission_time=${querySubmissionTime.toString}
-//             | first_row_read_at=${firstRowReadAt.toString}
-//             | last_row_read_at=${lastRowReadAt.toString}
-//             |""".stripMargin
-//        )
         rdd
       } else {
         throw new IllegalStateException("Could not read count from Redshift")
@@ -187,7 +175,7 @@ private[redshift] case class RedshiftRelation(
       "warehouse_query_latency_millis" ->
         s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
       "data_source" -> "redshift_unload",
-      "query_submission_time" -> querySubmissionTime.toString,
+      "query_submitted_at" -> querySubmissionTime.toString,
       "first_row_read_at"-> firstRowReadAt.toString,
       "last_row_read_at" -> lastRowReadAt.toString,
     )
