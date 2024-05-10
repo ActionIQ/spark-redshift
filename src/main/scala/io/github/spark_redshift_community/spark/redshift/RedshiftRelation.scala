@@ -22,6 +22,7 @@ import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import com.eclipsesource.json.Json
 import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -31,6 +32,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
+import java.time.Duration
 import scala.collection.JavaConverters._
 
 /**
@@ -92,24 +94,40 @@ private[redshift] case class RedshiftRelation(
     val conn = jdbcWrapper.getConnector(params)
     val queryWithTag = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, query)
     try {
-      val querySubmissionTime = System.currentTimeMillis()
+      val querySubmissionTime = java.time.Instant.now()
       val results = jdbcWrapper.executeQueryInterruptibly(conn.prepareStatement(queryWithTag))
       if (results.next()) {
         val numRows = results.getLong(1)
         val parallelism = sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
         val emptyRow = RowEncoder(StructType(Seq.empty)).createSerializer().apply(Row(Seq.empty))
-        val firstRowReadAt = System.currentTimeMillis()
+        val firstRowReadAt = java.time.Instant.now()
         val rdd = sqlContext.sparkContext
           .parallelize(1L to numRows, parallelism)
           .map(_ => emptyRow)
-        val lastRowReadAt = System.currentTimeMillis()
-        log.info(
-          s"""Statistics:
-             | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
-             | warehouse_query_latency=${firstRowReadAt - querySubmissionTime} ms
-             | data_source=redshift_unload
-             |""".stripMargin
+        val lastRowReadAt = java.time.Instant.now()
+        val tags = Map(
+          "warehouse_read_latency_millis" ->
+            s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
+          "warehouse_query_latency_millis" ->
+            s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
+          "data_source" -> "redshift_unload",
+          "query_submission_time" -> querySubmissionTime.toString,
+          "first_row_read_at"-> firstRowReadAt.toString,
+          "last_row_read_at" -> lastRowReadAt.toString,
         )
+        SparkContext.emitLog(tags)
+//        log.info(
+//          s"""Statistics:
+//             | warehouse_read_latency=
+//             | ${Duration.between(firstRowReadAt, lastRowReadAt).toMillis} ms
+//             | warehouse_query_latency=
+//             | ${Duration.between(querySubmissionTime, firstRowReadAt).toMillis} ms
+//             | data_source=redshift_unload
+//             | query_submission_time=${querySubmissionTime.toString}
+//             | first_row_read_at=${firstRowReadAt.toString}
+//             | last_row_read_at=${lastRowReadAt.toString}
+//             |""".stripMargin
+//        )
         rdd
       } else {
         throw new IllegalStateException("Could not read count from Redshift")
@@ -127,7 +145,7 @@ private[redshift] case class RedshiftRelation(
     val tempDir = params.createPerQueryTempDir()
     val unloadSql = buildUnloadStmt(query, tempDir, creds, params.sseKmsKey)
     val conn = jdbcWrapper.getConnector(params)
-    val querySubmissionTime = System.currentTimeMillis()
+    val querySubmissionTime = java.time.Instant.now()
     try {
       jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
     } finally {
@@ -155,21 +173,25 @@ private[redshift] case class RedshiftRelation(
       }
     }
 
-    val firstRowReadAt = System.currentTimeMillis()
+    val firstRowReadAt = java.time.Instant.now()
     val rdd = sqlContext.read
       .format(classOf[RedshiftFileFormat].getName)
       .schema(schema)
       .option("nullString", params.nullString)
       .load(filesToRead: _*)
       .queryExecution.executedPlan.execute()
-    val lastRowReadAt = System.currentTimeMillis()
-    log.info(
-      s"""Statistics:
-         | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
-         | warehouse_query_latency=${firstRowReadAt - querySubmissionTime} ms
-         | data_source=redshift_unload
-         |""".stripMargin
+    val lastRowReadAt = java.time.Instant.now()
+    val tags = Map(
+      "warehouse_read_latency_millis" ->
+        s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
+      "warehouse_query_latency_millis" ->
+        s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
+      "data_source" -> "redshift_unload",
+      "query_submission_time" -> querySubmissionTime.toString,
+      "first_row_read_at"-> firstRowReadAt.toString,
+      "last_row_read_at" -> lastRowReadAt.toString,
     )
+    SparkContext.emitLog(tags)
     rdd
   }
   /**
