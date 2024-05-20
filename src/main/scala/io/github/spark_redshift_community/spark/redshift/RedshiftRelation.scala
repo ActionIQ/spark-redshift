@@ -22,7 +22,6 @@ import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import com.eclipsesource.json.Json
 import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -74,6 +73,10 @@ private[redshift] case class RedshiftRelation(
     }
   }
 
+  private val redshiftUnload = "redshift_unload"
+
+  sqlContext.sparkContext.setLocalProperty("dataSource", redshiftUnload)
+
   override def toString: String = s"RedshiftRelation($tableNameOrSubquery)"
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
@@ -110,12 +113,12 @@ private[redshift] case class RedshiftRelation(
             s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
           "warehouse_query_latency_millis" ->
             s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
-          "data_source" -> "redshift_unload",
+          "data_source" -> redshiftUnload,
           "query_submitted_at" -> querySubmissionTime.toString,
           "first_row_read_at"-> firstRowReadAt.toString,
           "last_row_read_at" -> lastRowReadAt.toString,
         )
-        SparkContext.emitLog(tags)
+        sqlContext.sparkContext.emitLog(tags)
         rdd
       } else {
         throw new IllegalStateException("Could not read count from Redshift")
@@ -174,12 +177,12 @@ private[redshift] case class RedshiftRelation(
         s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
       "warehouse_query_latency_millis" ->
         s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
-      "data_source" -> "redshift_unload",
+      "data_source" -> redshiftUnload,
       "query_submitted_at" -> querySubmissionTime.toString,
       "first_row_read_at"-> firstRowReadAt.toString,
       "last_row_read_at" -> lastRowReadAt.toString,
     )
-    SparkContext.emitLog(tags)
+    sqlContext.sparkContext.emitLog(tags)
     rdd
   }
   /**
