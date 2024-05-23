@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
-import java.time.Duration
+import java.time.{Duration, Instant}
 import scala.collection.JavaConverters._
 
 /**
@@ -97,17 +97,17 @@ private[redshift] case class RedshiftRelation(
     val conn = jdbcWrapper.getConnector(params)
     val queryWithTag = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, query)
     try {
-      val querySubmissionTime = java.time.Instant.now()
+      val querySubmissionTime = Instant.now()
       val results = jdbcWrapper.executeQueryInterruptibly(conn.prepareStatement(queryWithTag))
       if (results.next()) {
         val numRows = results.getLong(1)
         val parallelism = sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
         val emptyRow = RowEncoder(StructType(Seq.empty)).createSerializer().apply(Row(Seq.empty))
-        val firstRowReadAt = java.time.Instant.now()
+        val firstRowReadAt = Instant.now()
         val rdd = sqlContext.sparkContext
           .parallelize(1L to numRows, parallelism)
           .map(_ => emptyRow)
-        val lastRowReadAt = java.time.Instant.now()
+        val lastRowReadAt = Instant.now()
         val tags = Map(
           "warehouse_read_latency_millis" ->
             s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
@@ -136,7 +136,7 @@ private[redshift] case class RedshiftRelation(
     val tempDir = params.createPerQueryTempDir()
     val unloadSql = buildUnloadStmt(query, tempDir, creds, params.sseKmsKey)
     val conn = jdbcWrapper.getConnector(params)
-    val querySubmissionTime = java.time.Instant.now()
+    val querySubmissionTime = Instant.now()
     try {
       jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
     } finally {
@@ -164,14 +164,14 @@ private[redshift] case class RedshiftRelation(
       }
     }
 
-    val firstRowReadAt = java.time.Instant.now()
+    val firstRowReadAt = Instant.now()
     val rdd = sqlContext.read
       .format(classOf[RedshiftFileFormat].getName)
       .schema(schema)
       .option("nullString", params.nullString)
       .load(filesToRead: _*)
       .queryExecution.executedPlan.execute()
-    val lastRowReadAt = java.time.Instant.now()
+    val lastRowReadAt = Instant.now()
     val tags = Map(
       "warehouse_read_latency_millis" ->
         s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
