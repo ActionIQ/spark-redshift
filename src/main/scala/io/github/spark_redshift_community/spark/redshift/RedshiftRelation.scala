@@ -158,7 +158,7 @@ private[redshift] case class RedshiftRelation(
       if (rs.next()) {
         readRowCount = rs.getLong(1)
       } else {
-        log.info(logEventNameTagger("Could not read row count from Redshift"))
+        log.info(logEventNameTagger("Could not read Unload row count from Redshift"))
       }
 
     } finally {
