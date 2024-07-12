@@ -118,7 +118,9 @@ private[redshift] case class RedshiftRelation(
 
         telemetryMetrics.readColumnCount.set(results.getMetaData.getColumnCount)
 
-        sqlContext.sparkContext.emitMetricsLog(telemetryMetrics.compileTelemetryTagsMap())
+        if (telemetryMetrics.logStatistics) {
+          sqlContext.sparkContext.emitMetricsLog(telemetryMetrics.compileTelemetryTagsMap())
+        }
 
         rdd
       } else {
@@ -137,6 +139,7 @@ private[redshift] case class RedshiftRelation(
     // Unload data from Redshift into a temporary directory in S3:
     val tempDir = params.createPerQueryTempDir()
     val unloadSql = buildUnloadStmt(query, tempDir, creds, params.sseKmsKey)
+    val unloadSqlWithTag = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, unloadSql)
     val conn = jdbcWrapper.getConnector(params)
 
     sqlContext.sparkContext.emitMetricsLog(
@@ -146,7 +149,7 @@ private[redshift] case class RedshiftRelation(
     telemetryMetrics.setQuerySubmissionTime()
 
     try {
-      jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
+      jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSqlWithTag))
     } finally {
       conn.close()
     }
@@ -181,13 +184,15 @@ private[redshift] case class RedshiftRelation(
       .queryExecution.executedPlan.execute()
     telemetryMetrics.setLastRowReadAt()
 
-    sqlContext.sparkContext.emitMetricsLog(
-      telemetryMetrics.compileTelemetryTagsMap() map {
-        case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
-          DATASOURCE_TELEMETRY_READ_ROW_COUNT -> rdd.count().toString
-        case t => t
-      }
-    )
+    if (telemetryMetrics.logStatistics) {
+      sqlContext.sparkContext.emitMetricsLog(
+        telemetryMetrics.compileTelemetryTagsMap() map {
+          case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
+            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> rdd.count().toString
+          case t => t
+        }
+      )
+    }
     rdd
   }
   /**
