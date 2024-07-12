@@ -185,11 +185,7 @@ private[redshift] case class RedshiftRelation(
 
     if (telemetryMetrics.logStatistics) {
       sqlContext.sparkContext.emitMetricsLog(
-        telemetryMetrics.compileTelemetryTagsMap() map {
-          case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
-            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> rdd.count().toString
-          case t => t
-        }
+        telemetryMetrics.compileTelemetryTagsMap()
       )
     }
     rdd
