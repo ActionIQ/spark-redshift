@@ -20,20 +20,24 @@
 // scalastyle:on line.size.limit
 package io.github.spark_redshift_community.spark.redshift.pushdowns
 
+import io.github.spark_redshift_community.spark.redshift.RedshiftRelation
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkPlan
 import io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration.QueryBuilder
-import org.apache.spark.SparkConf
+import org.apache.spark.{DataSourceTelemetryHelpers, SparkContext}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 
 // Entry point of the pushdowns, taking in a logical plan and returns a spark physical plan.
-class RedshiftPushDownStrategy(conf: SparkConf) extends Strategy {
+class RedshiftPushDownStrategy(sparkContext: SparkContext)
+  extends Strategy
+    with DataSourceTelemetryHelpers {
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = {
-    if (conf.get("spark.aiq.sql.enable_jdbc_pushdown", "false").toBoolean) {
+    if (sparkContext.getConf.get("spark.aiq.sql.enable_jdbc_pushdown", "false").toBoolean) {
       try {
         buildQuery(plan.transform({
           case Project(Nil, child) => child
@@ -41,7 +45,13 @@ class RedshiftPushDownStrategy(conf: SparkConf) extends Strategy {
         })).getOrElse(Nil)
       } catch {
         case e: Exception =>
-          log.warn(s"Pushdown failed", e)
+          if (foundRedshiftRelation(plan)) {
+            log.warn(
+              logEventNameTagger(
+                s"PushDown failed: ${e.getMessage}\n${e.getStackTrace.mkString("\n")}"
+              )
+            )
+          }
           Nil
       }
     } else {
@@ -53,6 +63,20 @@ class RedshiftPushDownStrategy(conf: SparkConf) extends Strategy {
     QueryBuilder.getRDDFromPlan(plan).map {
       case (output: Seq[Attribute], rdd: RDD[InternalRow], statement: String) =>
         Seq(RedshiftPushDownPlan(output, rdd, statement))
+    }.orElse {
+      // Set `dataSourceTelemetry.pushDownStrategyFailed` to `true` for when QueryBuilder fails
+      // ONLY when Redshift tables are involved in a query plan otherwise it's false signal
+      if (foundRedshiftRelation(plan)) {
+        sparkContext.dataSourceTelemetry.pushDownStrategyFailed.set(true)
+      }
+      None
+    }
+  }
+
+  private def foundRedshiftRelation(plan: LogicalPlan): Boolean = {
+    plan match {
+      case LogicalRelation(r, _, _, _) if r.isInstanceOf[RedshiftRelation] => true
+      case _ => false
     }
   }
 }

@@ -20,11 +20,9 @@ import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import io.github.spark_redshift_community.spark.redshift
 import io.github.spark_redshift_community.spark.redshift.pushdowns.RedshiftPushDownStrategy
-import org.apache.spark.ConnectorTelemetryHelpers
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, SchemaRelationProvider}
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceTelemetryProvider, RelationProvider, SchemaRelationProvider}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
@@ -37,30 +35,16 @@ class DefaultSource(
     s3ClientFactory: AWSCredentialsProvider => AmazonS3Client)
   extends RelationProvider
   with SchemaRelationProvider
-  with CreatableRelationProvider {
+  with CreatableRelationProvider
+  with DataSourceTelemetryProvider {
 
   private val log = LoggerFactory.getLogger(getClass)
 
-  private def initializeRelation(sqlContext: SQLContext): Unit = {
-    val sparkContext = sqlContext.sparkContext
+  override def shortName(): String = "redshift"
 
-    sparkContext.setLocalProperty("dataWarehouse", "redshift_spark_connector_unload")
+  override def dataSourceType(): String = "spark_connector"
 
-    if (!sparkContext.connectorTelemetryListener.get()) {
-      sparkContext.addSparkListener(new SparkListener {
-        override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-          try {
-            sparkContext.emitMetricsLog(
-              ConnectorTelemetryHelpers.compileOnApplicationEndLogMap(sparkContext)
-            )
-          } finally {
-            super.onApplicationEnd(applicationEnd)
-          }
-        }
-      })
-      sparkContext.connectorTelemetryListener.set(true)
-    }
-  }
+  override def dataWarehouseName(parameters: Map[String, String]): String = shortName()
 
   /**
    * Default constructor required by Data Source API
@@ -71,7 +55,7 @@ class DefaultSource(
     sqlContext: SQLContext,
   ): Unit = {
     sqlContext.sparkSession.experimental.extraStrategies ++= Seq(
-      new RedshiftPushDownStrategy(sqlContext.sparkContext.getConf)
+      new RedshiftPushDownStrategy(sqlContext.sparkContext)
     )
   }
   /**
@@ -84,7 +68,7 @@ class DefaultSource(
     val params = Parameters.mergeParameters(parameters)
     val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
     appendRedshiftPushDownStrategy(sqlContext)
-    initializeRelation(sqlContext)
+    initializeRelationTelemetry(sqlContext, parameters)
     redshift.RedshiftRelation(jdbcWrapper, s3ClientFactory, params, None, jdbcOptions)(sqlContext)
   }
 
@@ -98,7 +82,7 @@ class DefaultSource(
     val params = Parameters.mergeParameters(parameters)
     val jdbcOptions = new JDBCOptions(CaseInsensitiveMap(parameters))
     appendRedshiftPushDownStrategy(sqlContext)
-    initializeRelation(sqlContext)
+    initializeRelationTelemetry(sqlContext, parameters)
     redshift.RedshiftRelation(jdbcWrapper,
       s3ClientFactory,
       params,

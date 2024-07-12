@@ -30,16 +30,26 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types.{StructField, StructType}
 import io.github.spark_redshift_community.spark.redshift.{RedshiftPushDownSqlStatement, RedshiftRelation}
+import org.apache.spark.DataSourceTelemetryHelpers
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.jdbc.pushdowns.querygeneration.QueryPushdownUnsupportedException
+
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** This class takes a Spark LogicalPlan and attempts to generate
  * a query for Snowflake using tryBuild(). Here we use lazy instantiation
  * to avoid building the query from the get-go without tryBuild().
  */
 
-private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
+private[querygeneration] class QueryBuilder(plan: LogicalPlan)
+  extends Logging with DataSourceTelemetryHelpers {
 
   import QueryBuilder.convertProjections
+
+  /**
+   * Indicate whether any redshift tables are involved in a query plan.
+   */
+  private val foundRedshiftRelation: AtomicBoolean = new AtomicBoolean(false)
 
   private final val alias = Iterator.from(0).map(n => s"SUBQUERY_$n")
 
@@ -74,8 +84,16 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
     try {
       generateQueries(plan).orNull
     } catch {
+      case e: QueryPushdownUnsupportedException =>
+        // protects us against noisy logs unrelated to PushDown (can be too noisy)
+        if (foundRedshiftRelation.get()) {
+          log.info(e.detailedErrorMsg)
+        }
+        null
       case e: Exception =>
-        log.warn(s"Not able to generate queries", e)
+        if (foundRedshiftRelation.get()) {
+          log.warn(logEventNameTagger(s"Unable to generate PushDown queries"), e)
+        }
         null
     }
   }
@@ -101,6 +119,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
   private def generateQueries(plan: LogicalPlan): Option[RedshiftPushDownQuery] = {
     val query = plan match {
       case l@LogicalRelation(redshiftRelation: RedshiftRelation, _, _, _) =>
+        foundRedshiftRelation.set(true)
         Some(SourceQueryRedshift(redshiftRelation, l.output, alias.next))
 
       case UnaryOp(child) =>
@@ -165,12 +184,17 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) extends Logging {
         }
         Some(UnionQueryRedshift(children, alias.next, Some(output)))
 
-      case _ =>
+      case n =>
         // This exception is not a real issue. It will be caught in
         // QueryBuilder.
-        None
+        throw new QueryPushdownUnsupportedException(
+          s"PushDown failed to generate queries for treeNode=${n.nodeName} and tree=${n.toString}",
+          "GenerateQueries",
+          n.nodeName,
+          n.toString
+        )
     }
-    log.debug(s"Generated pushdown query $query from logical plan:\n$plan")
+    log.debug(s"Generated PushDown query '$query' from logical plan:\n$plan")
     query
   }
 
