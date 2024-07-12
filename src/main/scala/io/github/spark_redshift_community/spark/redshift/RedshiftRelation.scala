@@ -146,9 +146,19 @@ private[redshift] case class RedshiftRelation(
     )
 
     telemetryMetrics.setQuerySubmissionTime()
+    var readRowCount = 0L
 
     try {
       jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
+
+      // Row Count for the data that were Unloaded to S3 and we are going to read back
+      val rs = jdbcWrapper.executeQueryInterruptibly(
+        conn.prepareStatement("select pg_last_unload_count()")
+      )
+      while (rs.next) {
+        readRowCount = rs.getLong(1)
+      }
+
     } finally {
       conn.close()
     }
@@ -174,23 +184,18 @@ private[redshift] case class RedshiftRelation(
       }
     }
 
-    // Capturing the time of the "first row count"
-    telemetryMetrics.incrementRowCount()
     val rdd = sqlContext.read
       .format(classOf[RedshiftFileFormat].getName)
       .schema(schema)
       .option("nullString", params.nullString)
       .load(filesToRead: _*)
       .queryExecution.executedPlan.execute()
-    telemetryMetrics.setLastRowReadAt()
 
     if (telemetryMetrics.logStatistics) {
       sqlContext.sparkContext.emitMetricsLog(
         telemetryMetrics.compileTelemetryTagsMap() map {
           case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
-            // There isn't a good way to calculate the row count for the
-            // RDD other than rdd.count() which is a costly operation
-            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> "N/A"
+            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> readRowCount.toString
           case t => t
         }
       )
