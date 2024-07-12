@@ -1,1 +1,1 @@
-version in ThisBuild := "5.1.0-aiq15-yt4"
+version in ThisBuild := "5.1.0-aiq15"
