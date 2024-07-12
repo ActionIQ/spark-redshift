@@ -222,7 +222,7 @@ private[redshift] case class RedshiftRelation(
   ): RDD[InternalRow] = {
     val queryString = statement.toString
 
-    val dataWarehouse = Option(sqlContext.sparkContext.getLocalProperty("dataSource"))
+    val dataWarehouse = Option(sqlContext.sparkContext.getLocalProperty("dataWarehouse"))
     log.info(
       logEventNameTagger(
         "Generated Query with extra PushDown\n" +
