@@ -17,10 +17,9 @@
 
 package io.github.spark_redshift_community.spark.redshift.pushdowns.querygeneration
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, PythonUDF, ScalaUDF}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import io.github.spark_redshift_community.spark.redshift.RedshiftPushDownSqlStatement
+import org.apache.spark.sql.execution.datasources.jdbc.pushdowns.querygeneration.QueryPushdownUnsupportedException
 
 private[querygeneration] object UnsupportedStatement {
   /** Used mainly by QueryGeneration.convertStatement. This matches
@@ -41,15 +40,12 @@ private[querygeneration] object UnsupportedStatement {
     // This exception is not a real issue. It will be caught in
     // QueryBuilder. It can't be done here
     // because it is not clear whether there are any cloud tables here.
-    throw new IllegalArgumentException(
-      "failed to pushdown")
-  }
-
-  // Determine whether the unsupported operation is known or not.
-  private def isKnownUnsupportedOperation(expr: Expression): Boolean = {
-    // The pushdown for UDF is known unsupported
-    (expr.isInstanceOf[PythonUDF]
-      || expr.isInstanceOf[ScalaUDF]
-      || expr.isInstanceOf[ScalaUDAF])
+    throw new QueryPushdownUnsupportedException(
+      "PushDown failed because of an unsupported " +
+        s"operation=${expr.prettyName} and candidate sql=${expr.sql}",
+      "UnsupportedStatement",
+      expr.prettyName,
+      expr.sql
+    )
   }
 }

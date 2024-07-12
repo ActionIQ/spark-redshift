@@ -22,6 +22,8 @@ import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import com.eclipsesource.json.Json
 import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
+import org.apache.spark.{DataSourceTelemetry, DataSourceTelemetryHelpers}
+import org.apache.spark.DataSourceTelemetryNamespace.DATASOURCE_TELEMETRY_READ_ROW_COUNT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -31,7 +33,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 import org.slf4j.LoggerFactory
 
-import java.time.{Duration, Instant}
 import scala.collection.JavaConverters._
 
 /**
@@ -46,7 +47,8 @@ private[redshift] case class RedshiftRelation(
     (@transient val sqlContext: SQLContext)
   extends BaseRelation
   with PrunedFilteredScan
-  with InsertableRelation {
+  with InsertableRelation
+  with DataSourceTelemetryHelpers {
 
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -73,10 +75,6 @@ private[redshift] case class RedshiftRelation(
     }
   }
 
-  private val redshiftUnload = "redshift_unload"
-
-  sqlContext.sparkContext.setLocalProperty("dataSource", redshiftUnload)
-
   override def toString: String = s"RedshiftRelation($tableNameOrSubquery)"
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
@@ -93,32 +91,37 @@ private[redshift] case class RedshiftRelation(
     filters.filterNot(filter => FilterPushdown.buildFilterExpression(schema, filter).isDefined)
   }
 
-  private def executeCountQuery(query: String): RDD[InternalRow] = {
+  private def executeCountQuery(
+    query: String,
+    telemetryMetrics: DataSourceTelemetry
+  ): RDD[InternalRow] = {
     val conn = jdbcWrapper.getConnector(params)
     val queryWithTag = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, query)
+
+    sqlContext.sparkContext.emitMetricsLog(
+      telemetryMetrics.compileGlobalTelemetryTagsMap(Some(query))
+    )
+
     try {
-      val querySubmissionTime = Instant.now()
+      telemetryMetrics.setQuerySubmissionTime()
       val results = jdbcWrapper.executeQueryInterruptibly(conn.prepareStatement(queryWithTag))
       if (results.next()) {
         val numRows = results.getLong(1)
         val parallelism = sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
         val emptyRow = RowEncoder(StructType(Seq.empty)).createSerializer().apply(Row(Seq.empty))
-        val firstRowReadAt = Instant.now()
+
+        telemetryMetrics.incrementRowCount()
         val rdd = sqlContext.sparkContext
           .parallelize(1L to numRows, parallelism)
           .map(_ => emptyRow)
-        val lastRowReadAt = Instant.now()
-        val tags = Map(
-          "warehouse_read_latency_millis" ->
-            s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
-          "warehouse_query_latency_millis" ->
-            s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
-          "data_source" -> redshiftUnload,
-          "query_submitted_at" -> querySubmissionTime.toString,
-          "first_row_read_at"-> firstRowReadAt.toString,
-          "last_row_read_at" -> lastRowReadAt.toString,
-        )
-        sqlContext.sparkContext.emitLog(tags)
+        telemetryMetrics.setLastRowReadAt()
+
+        telemetryMetrics.readColumnCount.set(results.getMetaData.getColumnCount)
+
+        if (telemetryMetrics.logStatistics) {
+          sqlContext.sparkContext.emitMetricsLog(telemetryMetrics.compileTelemetryTagsMap())
+        }
+
         rdd
       } else {
         throw new IllegalStateException("Could not read count from Redshift")
@@ -130,15 +133,34 @@ private[redshift] case class RedshiftRelation(
 
   private def executeUnloadQuery(
     query: String,
-    schema: StructType
+    schema: StructType,
+    telemetryMetrics: DataSourceTelemetry
   ): RDD[InternalRow] = {
     // Unload data from Redshift into a temporary directory in S3:
     val tempDir = params.createPerQueryTempDir()
     val unloadSql = buildUnloadStmt(query, tempDir, creds, params.sseKmsKey)
     val conn = jdbcWrapper.getConnector(params)
-    val querySubmissionTime = Instant.now()
+
+    sqlContext.sparkContext.emitMetricsLog(
+      telemetryMetrics.compileGlobalTelemetryTagsMap(Some(unloadSql))
+    )
+
+    telemetryMetrics.setQuerySubmissionTime()
+    var readRowCount = 0L
+
     try {
       jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
+
+      // Row Count for the data that were Unloaded to S3 and we are going to read back
+      val rs = jdbcWrapper.executeQueryInterruptibly(
+        conn.prepareStatement("select pg_last_unload_count()")
+      )
+      if (rs.next()) {
+        readRowCount = rs.getLong(1)
+      } else {
+        log.info(logEventNameTagger("Could not read Unload row count from Redshift"))
+      }
+
     } finally {
       conn.close()
     }
@@ -164,25 +186,22 @@ private[redshift] case class RedshiftRelation(
       }
     }
 
-    val firstRowReadAt = Instant.now()
     val rdd = sqlContext.read
       .format(classOf[RedshiftFileFormat].getName)
       .schema(schema)
       .option("nullString", params.nullString)
       .load(filesToRead: _*)
       .queryExecution.executedPlan.execute()
-    val lastRowReadAt = Instant.now()
-    val tags = Map(
-      "warehouse_read_latency_millis" ->
-        s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
-      "warehouse_query_latency_millis" ->
-        s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
-      "data_source" -> redshiftUnload,
-      "query_submitted_at" -> querySubmissionTime.toString,
-      "first_row_read_at"-> firstRowReadAt.toString,
-      "last_row_read_at" -> lastRowReadAt.toString,
-    )
-    sqlContext.sparkContext.emitLog(tags)
+
+    if (telemetryMetrics.logStatistics) {
+      sqlContext.sparkContext.emitMetricsLog(
+        telemetryMetrics.compileTelemetryTagsMap() map {
+          case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
+            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> readRowCount.toString
+          case t => t
+        }
+      )
+    }
     rdd
   }
   /**
@@ -212,37 +231,56 @@ private[redshift] case class RedshiftRelation(
     schema: StructType
   ): RDD[InternalRow] = {
     val queryString = statement.toString
-    log.info(s"Executing query with extra pushdown ${queryString} in redshift")
+
+    val dataWarehouse = Option(sqlContext.sparkContext.getLocalProperty("dataWarehouse"))
+    log.info(
+      logEventNameTagger(
+        "Generated Query with extra PushDown\n" +
+          s"'$queryString'\nin ${dataWarehouse.getOrElse("N/A")}".stripMargin
+      )
+    )
+
+    val telemetryMetrics =
+      DataSourceTelemetryHelpers.createDataSourceTelemetry(sqlContext.sparkContext)
+
     if (queryString.contains("COUNT(")) {
-      executeCountQuery(queryString)
+      executeCountQuery(queryString, telemetryMetrics)
     } else {
       checkS3Setting()
       val escapedQuery = queryString.replace("\\", "\\\\").replace("'", "\\'")
-      executeUnloadQuery(escapedQuery, schema)
+      executeUnloadQuery(escapedQuery, schema, telemetryMetrics)
     }
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    if (sqlContext.sparkContext.dataSourceTelemetry.pushDownStrategyFailed.get()) {
+      sqlContext.sparkContext.dataSourceTelemetry.numOfFailedPushDownQueries.getAndIncrement()
+    }
+
+    val telemetryMetrics =
+      DataSourceTelemetryHelpers.createDataSourceTelemetry(sqlContext.sparkContext)
+
     checkS3Setting()
     if (requiredColumns.isEmpty) {
       // In the special case where no columns were requested, issue a `count(*)` against Redshift
       // rather than unloading data.
       val whereClause = FilterPushdown.buildWhereClause(schema, filters)
       val countQuery = s"SELECT count(*) FROM $tableNameOrSubquery $whereClause"
-      log.info(countQuery)
-      executeCountQuery(countQuery).asInstanceOf[RDD[Row]]
+      log.info(logEventNameTagger(countQuery))
+      executeCountQuery(countQuery, telemetryMetrics).asInstanceOf[RDD[Row]]
     } else {
       assert(!requiredColumns.isEmpty)
       val columnList = requiredColumns.map(col => s""""$col"""").mkString(", ")
       val whereClause = FilterPushdown.buildWhereClause(schema, filters)
       val query = {
-        // Since the query passed to UNLOAD will be enclosed in single quotes, we need to escape
-        // any backslashes and single quotes that appear in the query itself
-        val escapedTableNameOrSubqury = tableNameOrSubquery.replace("\\", "\\\\").replace("'", "\\'")
+        // Since the query passed to UNLOAD will be enclosed in single quotes, we need
+        // to escape any backslashes and single quotes that appear in the query itself
+        val escapedTableNameOrSubqury =
+          tableNameOrSubquery.replace("\\", "\\\\").replace("'", "\\'")
         s"SELECT $columnList FROM $escapedTableNameOrSubqury $whereClause"
       }
       val prunedSchema = pruneSchema(schema, requiredColumns)
-      executeUnloadQuery(query, prunedSchema).asInstanceOf[RDD[Row]]
+      executeUnloadQuery(query, prunedSchema, telemetryMetrics).asInstanceOf[RDD[Row]]
     }
   }
 
@@ -265,7 +303,7 @@ private[redshift] case class RedshiftRelation(
       s" ESCAPE MANIFEST NULL AS '${params.nullString}'" +
       s" $sseKmsClause"
     val finalQuery = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, unloadQuery)
-    log.info(finalQuery)
+    log.info(logEventNameTagger(finalQuery))
     finalQuery
   }
 
