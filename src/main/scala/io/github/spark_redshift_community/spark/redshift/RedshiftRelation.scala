@@ -174,6 +174,7 @@ private[redshift] case class RedshiftRelation(
       }
     }
 
+    // Capturing the time of the "first row count"
     telemetryMetrics.incrementRowCount()
     val rdd = sqlContext.read
       .format(classOf[RedshiftFileFormat].getName)
