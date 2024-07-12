@@ -185,7 +185,13 @@ private[redshift] case class RedshiftRelation(
 
     if (telemetryMetrics.logStatistics) {
       sqlContext.sparkContext.emitMetricsLog(
-        telemetryMetrics.compileTelemetryTagsMap()
+        telemetryMetrics.compileTelemetryTagsMap() map {
+          case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
+            // There isn't a good way to calculate the row count for the
+            // RDD other than rdd.count() which is a costly operation
+            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> "N/A"
+          case t => t
+        }
       )
     }
     rdd
