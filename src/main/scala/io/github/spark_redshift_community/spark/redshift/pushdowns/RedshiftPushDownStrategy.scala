@@ -74,9 +74,8 @@ class RedshiftPushDownStrategy(sparkContext: SparkContext)
   }
 
   private def foundRedshiftRelation(plan: LogicalPlan): Boolean = {
-    plan match {
+    plan.collectFirst {
       case LogicalRelation(r, _, _, _) if r.isInstanceOf[RedshiftRelation] => true
-      case _ => false
-    }
+    }.getOrElse(false)
   }
 }
