@@ -139,7 +139,6 @@ private[redshift] case class RedshiftRelation(
     // Unload data from Redshift into a temporary directory in S3:
     val tempDir = params.createPerQueryTempDir()
     val unloadSql = buildUnloadStmt(query, tempDir, creds, params.sseKmsKey)
-    val unloadSqlWithTag = RedshiftPushDownSqlStatement.appendTagsToQuery(jdbcOptions, unloadSql)
     val conn = jdbcWrapper.getConnector(params)
 
     sqlContext.sparkContext.emitMetricsLog(
@@ -149,7 +148,7 @@ private[redshift] case class RedshiftRelation(
     telemetryMetrics.setQuerySubmissionTime()
 
     try {
-      jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSqlWithTag))
+      jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
     } finally {
       conn.close()
     }
