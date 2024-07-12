@@ -155,8 +155,10 @@ private[redshift] case class RedshiftRelation(
       val rs = jdbcWrapper.executeQueryInterruptibly(
         conn.prepareStatement("select pg_last_unload_count()")
       )
-      while (rs.next) {
+      if (rs.next()) {
         readRowCount = rs.getLong(1)
+      } else {
+        log.info(logEventNameTagger("Could not read row count from Redshift"))
       }
 
     } finally {
