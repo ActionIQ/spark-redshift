@@ -107,11 +107,10 @@ private[redshift] case class RedshiftRelation(
       val results = jdbcWrapper.executeQueryInterruptibly(conn.prepareStatement(queryWithTag))
       if (results.next()) {
         val numRows = results.getLong(1)
-        telemetryMetrics.incrementRowCount()
-
         val parallelism = sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
         val emptyRow = RowEncoder(StructType(Seq.empty)).createSerializer().apply(Row(Seq.empty))
 
+        telemetryMetrics.incrementRowCount()
         val rdd = sqlContext.sparkContext
           .parallelize(1L to numRows, parallelism)
           .map(_ => emptyRow)
