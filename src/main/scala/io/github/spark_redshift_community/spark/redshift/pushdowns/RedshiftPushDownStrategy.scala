@@ -67,7 +67,7 @@ class RedshiftPushDownStrategy(sparkContext: SparkContext)
       // Set `dataSourceTelemetry.pushDownStrategyFailed` to `true` for when QueryBuilder fails
       // ONLY when Redshift tables are involved in a query plan otherwise it's false signal
       if (foundRedshiftRelation(plan)) {
-        sparkContext.dataSourceTelemetry.pushDownStrategyFailed.set(true)
+        sparkContext.dataSourceTelemetry.checkForPushDownFailures.set(true)
       }
       None
     }

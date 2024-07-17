@@ -23,7 +23,6 @@ import com.amazonaws.services.s3.AmazonS3Client
 import com.eclipsesource.json.Json
 import io.github.spark_redshift_community.spark.redshift.Parameters.MergedParameters
 import org.apache.spark.{DataSourceTelemetry, DataSourceTelemetryHelpers}
-import org.apache.spark.DataSourceTelemetryNamespace.DATASOURCE_TELEMETRY_READ_ROW_COUNT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -146,7 +145,6 @@ private[redshift] case class RedshiftRelation(
     )
 
     telemetryMetrics.setQuerySubmissionTime()
-    var readRowCount = 0L
 
     try {
       jdbcWrapper.executeInterruptibly(conn.prepareStatement(unloadSql))
@@ -156,7 +154,7 @@ private[redshift] case class RedshiftRelation(
         conn.prepareStatement("select pg_last_unload_count()")
       )
       if (rs.next()) {
-        readRowCount = rs.getLong(1)
+        telemetryMetrics.setRowCount(rs.getLong(1))
       } else {
         log.info(logEventNameTagger("Could not read Unload row count from Redshift"))
       }
@@ -194,13 +192,7 @@ private[redshift] case class RedshiftRelation(
       .queryExecution.executedPlan.execute()
 
     if (telemetryMetrics.logStatistics) {
-      sqlContext.sparkContext.emitMetricsLog(
-        telemetryMetrics.compileTelemetryTagsMap() map {
-          case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
-            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> readRowCount.toString
-          case t => t
-        }
-      )
+      sqlContext.sparkContext.emitMetricsLog(telemetryMetrics.compileTelemetryTagsMap())
     }
     rdd
   }
