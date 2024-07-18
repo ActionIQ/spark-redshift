@@ -64,10 +64,10 @@ class RedshiftPushDownStrategy(sparkContext: SparkContext)
       case (output: Seq[Attribute], rdd: RDD[InternalRow], statement: String) =>
         Seq(RedshiftPushDownPlan(output, rdd, statement))
     }.orElse {
-      // Set `dataSourceTelemetry.pushDownStrategyFailed` to `true` for when QueryBuilder fails
+      // Set `dataSourceTelemetry.checkForPushDownFailures` to `true` for when QueryBuilder fails
       // ONLY when Redshift tables are involved in a query plan otherwise it's false signal
       if (foundRedshiftRelation(plan)) {
-        sparkContext.dataSourceTelemetry.pushDownStrategyFailed.set(true)
+        sparkContext.dataSourceTelemetry.checkForPushDownFailures.set(true)
       }
       None
     }
